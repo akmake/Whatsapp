@@ -43,7 +43,7 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
         host: 'smtp.gmail.com',
         port: 465,
         secure: true,
-        auth: { user: tenant.email, pass: tenant.emailPassword },
+        auth: { user: tenant.bridgeEmail, pass: tenant.bridgeEmailPassword },
     });
 
     const today = new Date().toLocaleDateString('he-IL').replace(/\./g, '/');
@@ -59,8 +59,8 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
     `;
 
     await transporter.sendMail({
-        from: tenant.email,
-        to: tenant.email,
+        from: tenant.bridgeEmail,
+        to: tenant.destinationEmail,
         subject,
         html,
         attachments: attachments.map(a => ({ filename: a.filename, content: a.content })),
@@ -92,7 +92,16 @@ const pollEmails = async (tenantId, tenant, connection) => {
                 const all = item.parts.find(p => p.which === '');
                 const parsed = await simpleParser(`Imap-Id: ${uid}\r\n` + all.body);
 
+                const fromEmail = parsed.from?.value?.[0]?.address || '';
                 const subject = parsed.subject || '';
+
+                // מקבל רק תשובות מהמייל האישי של הלקוח
+                if (fromEmail.toLowerCase() !== tenant.destinationEmail.toLowerCase()) {
+                    await connection.addFlags(uid, ['\\Seen']);
+                    bridge.processing.delete(uid);
+                    continue;
+                }
+
                 if (!subject.includes('WA_MSG:')) {
                     await connection.addFlags(uid, ['\\Seen']);
                     bridge.processing.delete(uid);
@@ -132,7 +141,8 @@ const pollEmails = async (tenantId, tenant, connection) => {
                 }
 
                 await connection.addFlags(uid, ['\\Seen']);
-                bridge.stats.sent++;
+                bridge.stats.emailToWa++;
+                bridge.stats.lastEmailAt = new Date().toISOString();
                 bridge.processing.delete(uid);
 
             } catch (err) {
@@ -155,15 +165,13 @@ const pollEmails = async (tenantId, tenant, connection) => {
 export const startBridge = async (tenantId, tenant) => {
     if (bridges.has(tenantId)) stopBridge(tenantId);
 
-    const imapHost = tenant.emailHost || 'imap.gmail.com';
-
     let connection;
     try {
         connection = await imap.connect({
             imap: {
-                user: tenant.email,
-                password: tenant.emailPassword,
-                host: imapHost,
+                user: tenant.bridgeEmail,
+                password: tenant.bridgeEmailPassword,
+                host: 'imap.gmail.com',
                 port: 993,
                 tls: true,
                 authTimeout: 10000,
@@ -181,7 +189,14 @@ export const startBridge = async (tenantId, tenant) => {
     const bridge = {
         connection,
         processing: new Set(),
-        stats: { sent: 0, received: 0 },
+        stats: {
+            active: true,
+            emailToWa: 0,
+            waToEmail: 0,
+            lastEmailAt: null,
+            connectedAt: new Date().toISOString(),
+            reconnectCount: bridges.has(tenantId) ? (bridges.get(tenantId).stats.reconnectCount || 0) + 1 : 0,
+        },
         interval: null,
         healthInterval: null,
     };
@@ -217,5 +232,12 @@ export const stopBridge = (tenantId) => {
 
 export const getBridgeStats = (tenantId) => {
     const bridge = bridges.get(tenantId);
-    return bridge ? { ...bridge.stats, active: true } : { active: false };
+    return bridge ? { ...bridge.stats } : { active: false };
+};
+
+export const recordWaToEmail = (tenantId) => {
+    const bridge = bridges.get(tenantId);
+    if (!bridge) return;
+    bridge.stats.waToEmail++;
+    bridge.stats.lastEmailAt = new Date().toISOString();
 };

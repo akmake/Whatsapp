@@ -20,6 +20,12 @@ body {
   }
 }
 
+@layer components {
+  .input-base {
+    @apply w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#25D366]/30 focus:border-[#25D366] transition bg-white;
+  }
+}
+
 /* מחלקות עזר */
 .bg-brand-purple { background-color: var(--brand-purple); }
 .text-brand-purple { color: var(--brand-purple); }

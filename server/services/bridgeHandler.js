@@ -1,6 +1,6 @@
 import Tenant from '../models/Tenant.js';
 import { extractPhone, getMessageText, getMessageType, downloadMedia } from './whatsappManager.js';
-import { sendEmailToTenant } from './emailBridgeManager.js';
+import { sendEmailToTenant, recordWaToEmail } from './emailBridgeManager.js';
 
 export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     const tenant = await Tenant.findById(tenantId);
@@ -32,5 +32,6 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     if (!text && attachments.length === 0) return;
 
     await sendEmailToTenant(tenant, fromPhone, senderName, text, attachments);
+    recordWaToEmail(tenantId);
     console.log(`[${tenantId}] הודעה מ-${fromPhone} הועברה למייל`);
 };

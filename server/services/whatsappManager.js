@@ -42,6 +42,9 @@ export const isConnected = (tenantId) => {
 export const sendMessage = async (tenantId, jid, content) => {
     const inst = instances.get(tenantId);
     if (!inst?.sock) throw new Error('לא מחובר');
+    inst.stats.msgsSent++;
+    inst.stats.lastMsgAt = new Date().toISOString();
+    inst.stats.lastMsgDirection = 'wa_out';
     return await inst.sock.sendMessage(jid, content);
 };
 
@@ -61,7 +64,17 @@ export const startTenant = async (tenantId, onMessage) => {
 
     const msgCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
-    const inst = { sock: null, qr: null, status: 'connecting', msgCache, onMessage };
+    const inst = {
+        sock: null, qr: null, status: 'connecting', msgCache, onMessage,
+        stats: {
+            msgsReceived: 0,
+            msgsSent: 0,
+            reconnectCount: 0,
+            connectedAt: null,
+            lastMsgAt: null,
+            lastMsgDirection: null,
+        }
+    };
     instances.set(tenantId, inst);
 
     const sock = makeWASocket({
@@ -91,6 +104,7 @@ export const startTenant = async (tenantId, onMessage) => {
         if (connection === 'open') {
             inst.status = 'connected';
             inst.qr = null;
+            inst.stats.connectedAt = new Date().toISOString();
             console.log(`[${tenantId}] מחובר`);
         }
 
@@ -101,6 +115,7 @@ export const startTenant = async (tenantId, onMessage) => {
             console.log(`[${tenantId}] מנותק (קוד: ${code})`);
 
             if (shouldReconnect) {
+                inst.stats.reconnectCount++;
                 setTimeout(() => startTenant(tenantId, onMessage), 5000);
             } else {
                 // נותק בכוונה — מוחקים session
@@ -117,6 +132,9 @@ export const startTenant = async (tenantId, onMessage) => {
             msgCache.set(m.key.id, true);
 
             try {
+                inst.stats.msgsReceived++;
+                inst.stats.lastMsgAt = new Date().toISOString();
+                inst.stats.lastMsgDirection = 'wa_in';
                 await onMessage(tenantId, m, sock);
             } catch (err) {
                 console.error(`[${tenantId}] שגיאה בטיפול בהודעה:`, err.message);
@@ -138,6 +156,14 @@ export const getAllStatuses = () => {
     const result = {};
     for (const [id, inst] of instances.entries()) {
         result[id] = inst.status;
+    }
+    return result;
+};
+
+export const getAllStats = () => {
+    const result = {};
+    for (const [id, inst] of instances.entries()) {
+        result[id] = { status: inst.status, ...inst.stats };
     }
     return result;
 };

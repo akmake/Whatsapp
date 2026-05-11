@@ -5,6 +5,7 @@ import connectDB from './config/db.js';
 import globalErrorHandler from './middlewares/errorMiddleware.js';
 import AppError from './utils/AppError.js';
 import tenantRoutes from './routes/tenantRoutes.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
 import Tenant from './models/Tenant.js';
 import { startTenant } from './services/whatsappManager.js';
 import { startBridge } from './services/emailBridgeManager.js';
@@ -28,6 +29,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/tenants', tenantRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 app.all('*', (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
