@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "mongoose": "^9.0.1"
+  },
+  "scripts": {
+    "dev": "concurrently -n client,server -c \"bgBlue.bold,bgMagenta.bold\" \"npm run dev --prefix client\" \"npm run dev --prefix server\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
