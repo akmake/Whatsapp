@@ -73,11 +73,15 @@ const checkForNewEmails = async (tenantId, tenant, connection) => {
     try {
         if (!connection) return;
 
-        const messages = await connection.search(['UNSEEN'], {
+        const searchPromise = connection.search(['UNSEEN'], {
             bodies: ['HEADER', 'TEXT', ''],
             markSeen: false,
             struct: true,
         });
+        const messages = await Promise.race([
+            searchPromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('search timeout')), 15000)),
+        ]);
 
         if (messages.length === 0) return;
 

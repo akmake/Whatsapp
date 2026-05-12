@@ -29,6 +29,20 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
         }
     }
 
+    if (msgType === 'contactMessage') {
+        const vcard = msg.message.contactMessage.vcard;
+        const name = msg.message.contactMessage.displayName || 'contact';
+        attachments.push({ filename: `${name}.vcf`, content: Buffer.from(vcard, 'utf8') });
+    }
+
+    if (msgType === 'contactsArrayMessage') {
+        const contacts = msg.message.contactsArrayMessage.contacts || [];
+        for (const c of contacts) {
+            const name = c.displayName || 'contact';
+            attachments.push({ filename: `${name}.vcf`, content: Buffer.from(c.vcard, 'utf8') });
+        }
+    }
+
     if (!text && attachments.length === 0) return;
 
     await sendEmailToTenant(tenant, fromPhone, senderName, text, attachments);
