@@ -50,3 +50,6 @@ coverage/
 *.tgz
 *.bak
 *.swp
+
+# WhatsApp sessions
+server/sessions/

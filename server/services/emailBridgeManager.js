@@ -3,11 +3,18 @@ import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
 import { isConnected, sendMessage, extractPhone, getMessageText, getMessageType, downloadMedia } from './whatsappManager.js';
 
-// tenantId => { interval, healthInterval, connection, stats }
+// tenantId => { interval, healthInterval, connection, stats, reconnectAttempts }
 const bridges = new Map();
 
-const POLL_INTERVAL = 10_000;
+const getImapReconnectDelay = (attempts) => {
+    const delay = Math.min(BASE_IMAP_RECONNECT * Math.pow(2, attempts), MAX_IMAP_RECONNECT);
+    return delay + delay * Math.random() * 0.3;
+};
+
+const POLL_INTERVAL = 60_000;
 const HEALTH_INTERVAL = 5 * 60_000;
+const BASE_IMAP_RECONNECT = 15_000;
+const MAX_IMAP_RECONNECT = 5 * 60_000;
 
 // ============================================================
 // ניקוי גוף מייל — מסיר ציטוטים וחתימות
@@ -174,28 +181,34 @@ export const startBridge = async (tenantId, tenant) => {
                 host: 'imap.gmail.com',
                 port: 993,
                 tls: true,
-                authTimeout: 10000,
+                authTimeout: 30000,
                 tlsOptions: { rejectUnauthorized: false },
             },
         });
         await connection.openBox('INBOX');
         console.log(`[${tenantId}] IMAP מחובר`);
     } catch (err) {
-        console.error(`[${tenantId}] IMAP חיבור נכשל:`, err.message);
-        setTimeout(() => startBridge(tenantId, tenant), 30_000);
+        const attempts = bridges.get(tenantId)?.reconnectAttempts ?? 0;
+        const delay = getImapReconnectDelay(attempts);
+        console.error(`[${tenantId}] IMAP חיבור נכשל:`, err.message, `— ניסיון חוזר בעוד ${Math.round(delay/1000)}ש׳`);
+        // שומרים את מונה הניסיונות גם בין reconnects
+        bridges.set(tenantId, { ...(bridges.get(tenantId) || {}), reconnectAttempts: attempts + 1 });
+        setTimeout(() => startBridge(tenantId, tenant), delay);
         return;
     }
 
+    const prev = bridges.get(tenantId);
     const bridge = {
         connection,
         processing: new Set(),
+        reconnectAttempts: 0,
         stats: {
             active: true,
             emailToWa: 0,
             waToEmail: 0,
             lastEmailAt: null,
             connectedAt: new Date().toISOString(),
-            reconnectCount: bridges.has(tenantId) ? (bridges.get(tenantId).stats.reconnectCount || 0) + 1 : 0,
+            reconnectCount: prev?.stats?.reconnectCount != null ? prev.stats.reconnectCount + 1 : 0,
         },
         interval: null,
         healthInterval: null,
@@ -215,8 +228,11 @@ export const startBridge = async (tenantId, tenant) => {
 
     connection.on('error', (err) => {
         console.error(`[${tenantId}] IMAP שגיאה:`, err.message);
+        const attempts = bridges.get(tenantId)?.reconnectAttempts ?? 0;
         stopBridge(tenantId);
-        setTimeout(() => startBridge(tenantId, tenant), 10_000);
+        const delay = getImapReconnectDelay(attempts);
+        bridges.set(tenantId, { reconnectAttempts: attempts + 1 });
+        setTimeout(() => startBridge(tenantId, tenant), delay);
     });
 };
 
@@ -240,4 +256,35 @@ export const recordWaToEmail = (tenantId) => {
     if (!bridge) return;
     bridge.stats.waToEmail++;
     bridge.stats.lastEmailAt = new Date().toISOString();
+};
+
+// בדיקת חיבור IMAP חד-פעמית — לא שומרת state
+export const testImapConnection = async (email, password) => {
+    let connection;
+    try {
+        connection = await imap.connect({
+            imap: {
+                user: email,
+                password,
+                host: 'imap.gmail.com',
+                port: 993,
+                tls: true,
+                authTimeout: 15000,
+                tlsOptions: { rejectUnauthorized: false },
+            },
+        });
+        await connection.openBox('INBOX');
+        return { ok: true };
+    } catch (err) {
+        const msg = err.message || '';
+        if (msg.toLowerCase().includes('invalid credentials') || msg.toLowerCase().includes('authentication failed')) {
+            return { ok: false, error: 'סיסמת האפ שגויה או שגישת IMAP לא מופעלת בחשבון' };
+        }
+        if (msg.toLowerCase().includes('timeout')) {
+            return { ok: false, error: 'תם הזמן — בדוק שגישת IMAP מופעלת בחשבון Gmail' };
+        }
+        return { ok: false, error: `שגיאת חיבור: ${msg}` };
+    } finally {
+        try { connection?.end?.(); } catch (e) { /* ok */ }
+    }
 };

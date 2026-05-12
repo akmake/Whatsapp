@@ -1,7 +1,7 @@
 import express from 'express';
 import Tenant from '../models/Tenant.js';
 import { startTenant, stopTenant, getStatus, getQR, getAllStatuses, isConnected, sendMessage } from '../services/whatsappManager.js';
-import { startBridge, stopBridge, getBridgeStats } from '../services/emailBridgeManager.js';
+import { startBridge, stopBridge, getBridgeStats, testImapConnection } from '../services/emailBridgeManager.js';
 import { handleIncomingWAMessage } from '../services/bridgeHandler.js';
 
 const router = express.Router();
@@ -44,6 +44,12 @@ router.put('/:id/email-config', async (req, res) => {
     const { bridgeEmail, bridgeEmailPassword, destinationEmail } = req.body;
     if (!bridgeEmail || !bridgeEmailPassword || !destinationEmail) {
         return res.status(400).json({ error: 'כל שדות המייל הם חובה' });
+    }
+
+    // בדיקת חיבור IMAP לפני שמירה
+    const test = await testImapConnection(bridgeEmail, bridgeEmailPassword);
+    if (!test.ok) {
+        return res.status(400).json({ error: test.error });
     }
 
     const tenant = await Tenant.findByIdAndUpdate(

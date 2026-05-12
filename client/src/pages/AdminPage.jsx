@@ -267,6 +267,12 @@ function TenantListRow({ tenant: t, selected, onClick }) {
     );
 }
 
+const BRIDGE_STATUS = {
+    active:       { text: 'מחובר',   dot: 'bg-[#25D366]', color: 'text-green-600' },
+    inactive:     { text: 'לא מוגדר', dot: 'bg-gray-300',  color: 'text-gray-400'  },
+    disconnected: { text: 'מנותק',   dot: 'bg-red-500',   color: 'text-red-500'   },
+};
+
 // ─── Right panel ─────────────────────────────────────────────────
 function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, onCompose, onEmailSaved }) {
     const s = STATUS[t.waStatus] || STATUS.disconnected;
@@ -276,15 +282,21 @@ function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, onCompose, onEmai
         destinationEmail: t.destinationEmail || '',
     });
     const [saving, setSaving] = useState(false);
-    const [msg, setMsg] = useState('');
+    const [saveResult, setSaveResult] = useState(null); // { ok, msg }
+
+    const bridge = t.bridge || {};
+    const bridgeStatusKey = bridge.active ? 'active' : (t.bridgeEmail ? 'disconnected' : 'inactive');
+    const bs = BRIDGE_STATUS[bridgeStatusKey];
 
     const saveEmail = async (e) => {
-        e.preventDefault(); setSaving(true); setMsg('');
+        e.preventDefault(); setSaving(true); setSaveResult(null);
         try {
             await api.put(`/tenants/${t._id}/email-config`, ef);
-            setMsg('✓ נשמר'); onEmailSaved();
-        } catch (err) { setMsg(err.response?.data?.error || 'שגיאה'); }
-        finally { setSaving(false); }
+            setSaveResult({ ok: true, msg: '✓ המייל מחובר ופועל' });
+            onEmailSaved();
+        } catch (err) {
+            setSaveResult({ ok: false, msg: err.response?.data?.error || 'שגיאה' });
+        } finally { setSaving(false); }
     };
 
     return (
@@ -317,7 +329,13 @@ function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, onCompose, onEmai
 
                 {/* Email config card */}
                 <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-                    <div className="bg-[#075E54] px-5 py-3">
+                    <div className="bg-[#075E54] px-5 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${bs.dot}`} />
+                            <span className={`text-xs font-medium ${bridgeStatusKey === 'active' ? 'text-[#dcf8c6]' : 'text-[#aecdc8]'}`}>
+                                {bs.text}
+                            </span>
+                        </div>
                         <p className="text-white font-semibold text-sm">הגדרות מייל</p>
                     </div>
                     <form onSubmit={saveEmail} className="p-5 space-y-4">
@@ -333,12 +351,25 @@ function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, onCompose, onEmai
                             <input className="input-base" type="email" placeholder="client@gmail.com"
                                 value={ef.destinationEmail} onChange={e => setEf(p => ({ ...p, destinationEmail: e.target.value }))} required />
                         </Field>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col gap-2">
                             <button type="submit" disabled={saving}
-                                className="bg-[#25D366] text-white px-6 py-2 rounded-xl text-sm font-medium hover:bg-[#1fb954] disabled:opacity-50 transition">
-                                {saving ? 'שומר...' : 'שמור הגדרות'}
+                                className="bg-[#25D366] text-white px-6 py-2.5 rounded-xl text-sm font-medium hover:bg-[#1fb954] disabled:opacity-50 transition flex items-center justify-center gap-2">
+                                {saving ? (
+                                    <>
+                                        <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                        בודק חיבור...
+                                    </>
+                                ) : 'שמור ובדוק חיבור'}
                             </button>
-                            {msg && <span className={`text-sm ${msg.startsWith('✓') ? 'text-green-600' : 'text-red-500'}`}>{msg}</span>}
+                            {saveResult && (
+                                <div className={`flex items-start gap-2 px-3 py-2.5 rounded-lg text-sm
+                                    ${saveResult.ok
+                                        ? 'bg-green-50 text-green-700 border border-green-200'
+                                        : 'bg-red-50 text-red-600 border border-red-200'}`}>
+                                    <span className="flex-shrink-0 mt-0.5">{saveResult.ok ? '✓' : '✕'}</span>
+                                    <span>{saveResult.msg}</span>
+                                </div>
+                            )}
                         </div>
                     </form>
                 </div>
@@ -347,6 +378,26 @@ function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, onCompose, onEmai
                 <div className="bg-white rounded-xl shadow-sm p-5">
                     <p className="text-sm font-semibold text-[#111b21] mb-3">פרטי חיבור</p>
                     <div className="divide-y divide-gray-50">
+                        {/* WhatsApp status */}
+                        <div className="flex justify-between items-center py-2.5">
+                            <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${s.dot}`} />
+                                <span className={`text-sm font-medium ${
+                                    t.waStatus === 'connected'  ? 'text-green-600' :
+                                    t.waStatus === 'connecting' ? 'text-yellow-600' :
+                                    t.waStatus === 'waiting_qr' ? 'text-blue-600' : 'text-red-500'
+                                }`}>{s.text}</span>
+                            </div>
+                            <span className="text-xs text-[#8696a0]">וואצאפ</span>
+                        </div>
+                        {/* Email bridge status */}
+                        <div className="flex justify-between items-center py-2.5">
+                            <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${bs.dot}`} />
+                                <span className={`text-sm font-medium ${bs.color}`}>{bs.text}</span>
+                            </div>
+                            <span className="text-xs text-[#8696a0]">גשר מייל</span>
+                        </div>
                         <InfoRow label="מספר וואצאפ" value={t.phone} mono />
                         <InfoRow label="מייל תעבורה" value={t.bridgeEmail || '—'} warn={!t.bridgeEmail} />
                         <InfoRow label="מייל ייעד"    value={t.destinationEmail || '—'} warn={!t.destinationEmail} />
