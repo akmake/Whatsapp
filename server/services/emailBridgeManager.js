@@ -2,6 +2,7 @@ import imap from 'imap-simple';
 import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
 import { isConnected, sendMessage } from './whatsappManager.js';
+import Message from '../models/Message.js';
 
 // tenantId => { connection, emailInterval, healthInterval, stats }
 const bridges = new Map();
@@ -37,6 +38,34 @@ const cleanEmailBody = (text) => {
 // ============================================================
 // שליחת מייל (WA → Email)
 // ============================================================
+const escapeHtml = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+
+const renderBubble = (msg, isNew = false) => {
+    const isIn = msg.direction === 'in';
+    const time = new Date(msg.createdAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+    const bubbleBg   = isIn  ? '#dcf8c6' : '#ffffff';
+    const borderRad  = isIn  ? '8px 0px 8px 8px' : '0px 8px 8px 8px';
+    const align      = isIn  ? 'right' : 'left';
+    const tdEmpty    = isIn  ? '<td width="15%"></td>' : '';
+    const tdEmptyEnd = !isIn ? '<td width="15%"></td>' : '';
+    const checks     = isIn  ? '' : '<span style="font-size:12px;color:#53bdeb;margin-right:3px;">✓✓</span>';
+
+    return `
+    <tr><td style="padding:3px 0;">
+      <table width="100%" cellpadding="0" cellspacing="0"><tr>
+        ${tdEmpty}
+        <td width="85%" align="${align}">
+          ${isNew ? '<div style="text-align:center;margin-bottom:6px;"><span style="background:#e1f3fb;color:#075e54;font-size:11px;padding:3px 10px;border-radius:8px;font-weight:bold;">▼ הודעה חדשה</span></div>' : ''}
+          <div style="display:inline-block;background:${bubbleBg};border-radius:${borderRad};padding:8px 12px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,0.12);">
+            <div style="font-size:13px;color:#111;line-height:1.5;">${escapeHtml(msg.text)}</div>
+            <div style="text-align:left;margin-top:4px;">${checks}<span style="font-size:10px;color:#999;">${time}</span></div>
+          </div>
+        </td>
+        ${tdEmptyEnd}
+      </tr></table>
+    </td></tr>`;
+};
+
 export const sendEmailToTenant = async (tenant, fromPhone, senderName, textContent, attachments = []) => {
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
@@ -50,77 +79,68 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
     const messageId = `<wa-${tenant._id}-${fromPhone}-${Date.now()}@bridge>`;
 
     const now = new Date();
-    const timeStr = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
     const dateStr = now.toLocaleDateString('he-IL');
 
-    const msgHtml = (textContent || '')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/\n/g, '<br>');
+    // Fetch today's history (all except the new message just saved)
+    const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
+    const history = await Message.find({
+        tenantId: tenant._id.toString(),
+        phone: fromPhone,
+        createdAt: { $gte: startOfDay },
+    }).sort({ createdAt: 1 }).lean();
+
+    // Last message is the one we just saved (direction:'in') — mark it as new
+    const bubblesHtml = history.map((m, i) =>
+        renderBubble(m, i === history.length - 1 && m.direction === 'in')
+    ).join('');
 
     const html = `
 <!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f0f0f0;font-family:Arial,sans-serif;">
-
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f0f0;padding:16px 0;">
   <tr><td align="center">
     <table width="100%" cellpadding="0" cellspacing="0" style="max-width:540px;">
 
       <!-- Reply CTA -->
       <tr><td style="background:#25d366;border-radius:12px 12px 0 0;padding:10px 18px;text-align:center;">
-        <div style="color:#fff;font-size:14px;font-weight:bold;">
-          ↩ לחץ Reply וכתוב את תשובתך
-        </div>
+        <div style="color:#fff;font-size:14px;font-weight:bold;">↩ לחץ Reply וכתוב את תשובתך</div>
       </td></tr>
 
       <!-- Header -->
-      <tr><td style="background:#075e54;padding:14px 18px;">
+      <tr><td style="background:#075e54;padding:12px 16px;">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="width:44px;vertical-align:middle;">
+            <div style="width:40px;height:40px;border-radius:50%;background:#25d366;text-align:center;line-height:40px;font-size:18px;color:#fff;font-weight:bold;">
+              ${(senderName || fromPhone).charAt(0).toUpperCase()}
+            </div>
+          </td>
+          <td style="padding-right:10px;vertical-align:middle;">
+            <div style="color:#fff;font-size:15px;font-weight:bold;direction:rtl;">${escapeHtml(senderName)}</div>
+            <div style="color:#b2dfdb;font-size:12px;">+${fromPhone}</div>
+          </td>
+          <td align="left" style="vertical-align:middle;">
+            <div style="color:#b2dfdb;font-size:11px;">${dateStr}</div>
+          </td>
+        </tr></table>
+      </td></tr>
+
+      <!-- Chat bubbles -->
+      <tr><td style="background:#e5ddd5;padding:12px 10px;">
         <table width="100%" cellpadding="0" cellspacing="0">
-          <tr>
-            <td style="width:44px;vertical-align:middle;">
-              <div style="width:40px;height:40px;border-radius:50%;background:#25d366;text-align:center;line-height:40px;font-size:18px;color:#fff;font-weight:bold;">
-                ${(senderName || fromPhone).charAt(0).toUpperCase()}
-              </div>
-            </td>
-            <td style="padding-right:10px;vertical-align:middle;">
-              <div style="color:#fff;font-size:16px;font-weight:bold;direction:rtl;">${senderName}</div>
-              <div style="color:#b2dfdb;font-size:12px;">+${fromPhone}</div>
-            </td>
-            <td align="left" style="vertical-align:middle;">
-              <div style="color:#b2dfdb;font-size:11px;">${dateStr}</div>
-            </td>
-          </tr>
+          ${bubblesHtml}
         </table>
       </td></tr>
 
-      <!-- Chat area -->
-      <tr><td style="background:#e5ddd5;padding:16px 12px;">
-        <table width="100%" cellpadding="0" cellspacing="0">
-          <tr>
-            <td width="15%"></td>
-            <td width="85%" align="right">
-              <div style="display:inline-block;background:#dcf8c6;border-radius:8px 0px 8px 8px;padding:10px 14px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,0.15);">
-                <div style="font-size:14px;color:#111;line-height:1.5;">${msgHtml}</div>
-                <div style="text-align:left;margin-top:6px;">
-                  <span style="font-size:11px;color:#7a9e7e;">${timeStr}</span>
-                  <span style="font-size:12px;color:#53bdeb;margin-right:3px;">✓✓</span>
-                </div>
-              </div>
-            </td>
-          </tr>
-        </table>
-      </td></tr>
-
-      <!-- Separator (parser uses this to strip quoted content) -->
-      <tr><td style="background:#f7f7f7;border-top:1px solid #e0e0e0;border-radius:0 0 12px 12px;padding:8px 18px;text-align:center;">
+      <!-- Separator -->
+      <tr><td style="background:#f7f7f7;border-top:1px solid #e0e0e0;border-radius:0 0 12px 12px;padding:8px 18px;">
         <div style="border-top:2px dashed #ddd;margin:4px 0;"></div>
       </td></tr>
 
     </table>
   </td></tr>
 </table>
-
 </body>
 </html>`;
 
@@ -183,7 +203,10 @@ const checkForNewEmails = async (tenantId, tenant, connection) => {
 
                     try {
                         const body = cleanEmailBody(parsed.text);
-                        if (body) await sendMessage(tenantId, jid, { text: body });
+                        if (body) {
+                            await sendMessage(tenantId, jid, { text: body });
+                            await Message.create({ tenantId, phone, senderName: 'אני', direction: 'out', text: body });
+                        }
 
                         if (parsed.attachments?.length) {
                             for (const att of parsed.attachments) {
