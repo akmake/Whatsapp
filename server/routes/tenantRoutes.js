@@ -39,6 +39,21 @@ router.post('/', async (req, res) => {
     res.status(201).json({ _id: tenant._id, name, phone, waStatus: 'connecting' });
 });
 
+// עדכון שם וטלפון של לקוח
+router.put('/:id/info', async (req, res) => {
+    const { name, phone } = req.body;
+    if (!name || !phone) return res.status(400).json({ error: 'שם ומספר טלפון הם חובה' });
+
+    const tenant = await Tenant.findByIdAndUpdate(
+        req.params.id,
+        { name, phone },
+        { new: true }
+    );
+    if (!tenant) return res.status(404).json({ error: 'לקוח לא נמצא' });
+
+    res.json({ ok: true, name: tenant.name, phone: tenant.phone });
+});
+
 // עדכון הגדרות מייל של לקוח
 router.put('/:id/email-config', async (req, res) => {
     const { bridgeEmail, bridgeEmailPassword, destinationEmail } = req.body;

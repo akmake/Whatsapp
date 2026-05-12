@@ -17,6 +17,10 @@ export default function AdminPage() {
     const [newPhone, setNewPhone]       = useState('');
     const [addError, setAddError]       = useState('');
     const [addLoading, setAddLoading]   = useState(false);
+    const [editModal, setEditModal]     = useState(null); // { id, name, phone }
+    const [editForm, setEditForm]       = useState({ name: '', phone: '' });
+    const [editLoading, setEditLoading] = useState(false);
+    const [editError, setEditError]     = useState('');
     const [qrModal, setQrModal]         = useState(null);
     const [composeModal, setCompose]    = useState(null);
     const [composeForm, setComposeForm] = useState({ phone: '', message: '' });
@@ -53,6 +57,23 @@ export default function AdminPage() {
             setComposeForm({ phone: '', message: '' }); setCompose(null);
         } catch (err) { setSendError(err.response?.data?.error || 'שגיאה'); }
         finally { setSendLoading(false); }
+    };
+
+    const openEdit = (t) => {
+        setEditForm({ name: t.name, phone: t.phone });
+        setEditError('');
+        setEditModal({ id: t._id });
+    };
+
+    const handleEdit = async (e) => {
+        e.preventDefault();
+        setEditLoading(true); setEditError('');
+        try {
+            await api.put(`/tenants/${editModal.id}/info`, editForm);
+            setEditModal(null);
+            fetchTenants();
+        } catch (err) { setEditError(err.response?.data?.error || 'שגיאה'); }
+        finally { setEditLoading(false); }
     };
 
     const handleDelete = async (id, name) => {
@@ -140,6 +161,7 @@ export default function AdminPage() {
                         onQR={() => openQR(selected)}
                         onReconnect={() => api.post(`/tenants/${selected._id}/reconnect`).then(fetchTenants)}
                         onDelete={() => handleDelete(selected._id, selected.name)}
+                        onEdit={() => openEdit(selected)}
                         onCompose={() => {
                             setCompose({ tenantId: selected._id, name: selected.name });
                             setComposeForm({ phone: '', message: '' });
@@ -186,6 +208,37 @@ export default function AdminPage() {
                                 {addLoading ? '...' : 'הוסף'}
                             </button>
                             <button type="button" onClick={() => setShowAdd(false)}
+                                className="flex-1 bg-gray-100 text-gray-600 py-2.5 rounded-xl font-medium hover:bg-gray-200 transition text-sm">
+                                ביטול
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+
+            {/* ── Edit tenant modal ── */}
+            {editModal && (
+                <Modal onClose={() => setEditModal(null)}>
+                    <h3 className="text-lg font-bold mb-1 text-[#111b21]">עריכת לקוח</h3>
+                    <p className="text-sm text-[#8696a0] mb-5">ערוך שם ומספר וואצאפ</p>
+                    <form onSubmit={handleEdit} className="space-y-3">
+                        <Field label="שם הלקוח">
+                            <input className="input-base" placeholder="משה לוי"
+                                value={editForm.name}
+                                onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} required />
+                        </Field>
+                        <Field label="מספר וואצאפ">
+                            <input className="input-base" placeholder="972501234567"
+                                value={editForm.phone}
+                                onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))} required />
+                        </Field>
+                        {editError && <p className="text-red-500 text-sm">{editError}</p>}
+                        <div className="flex gap-2 pt-1">
+                            <button type="submit" disabled={editLoading}
+                                className="flex-1 bg-[#25D366] text-white py-2.5 rounded-xl font-medium hover:bg-[#1fb954] disabled:opacity-50 transition text-sm">
+                                {editLoading ? '...' : 'שמור'}
+                            </button>
+                            <button type="button" onClick={() => setEditModal(null)}
                                 className="flex-1 bg-gray-100 text-gray-600 py-2.5 rounded-xl font-medium hover:bg-gray-200 transition text-sm">
                                 ביטול
                             </button>
@@ -274,7 +327,7 @@ const BRIDGE_STATUS = {
 };
 
 // ─── Right panel ─────────────────────────────────────────────────
-function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, onCompose, onEmailSaved }) {
+function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, onEdit, onCompose, onEmailSaved }) {
     const s = STATUS[t.waStatus] || STATUS.disconnected;
     const [ef, setEf] = useState({
         bridgeEmail: t.bridgeEmail || '',
@@ -310,6 +363,7 @@ function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, onCompose, onEmai
             <div className="bg-[#f0f2f5] px-4 py-2.5 flex items-center justify-between flex-shrink-0 border-b border-[#d1d7db]">
                 <div className="flex items-center gap-2">
                     <WaBtn onClick={onDelete} red>מחק</WaBtn>
+                    <WaBtn onClick={onEdit}>ערוך</WaBtn>
                     {t.waStatus === 'connected'    && <WaBtn onClick={onCompose} green>שלח הודעה</WaBtn>}
                     {t.waStatus === 'waiting_qr'   && <WaBtn onClick={onQR}>הצג QR</WaBtn>}
                     {t.waStatus === 'disconnected' && <WaBtn onClick={onReconnect} yellow>חבר מחדש</WaBtn>}
