@@ -50,6 +50,12 @@ const renderBubble = (msg, isNew = false) => {
     const tdEmptyEnd = !isIn ? '<td width="15%"></td>' : '';
     const checks     = isIn  ? '' : '<span style="font-size:12px;color:#53bdeb;margin-right:3px;">✓✓</span>';
 
+    const isInlineImage = msg.text?.startsWith('__IMAGE__');
+    const cid = isInlineImage ? msg.text.replace('__IMAGE__', '') : null;
+    const contentHtml = isInlineImage
+        ? `<img src="cid:${cid}" style="max-width:240px;border-radius:6px;display:block;">`
+        : `<div style="font-size:13px;color:#111;line-height:1.5;">${escapeHtml(msg.text)}</div>`;
+
     return `
     <tr><td style="padding:3px 0;">
       <table width="100%" cellpadding="0" cellspacing="0"><tr>
@@ -57,7 +63,7 @@ const renderBubble = (msg, isNew = false) => {
         <td width="85%" align="${align}">
           ${isNew ? '<div style="text-align:center;margin-bottom:6px;"><span style="background:#e1f3fb;color:#075e54;font-size:11px;padding:3px 10px;border-radius:8px;font-weight:bold;">▼ הודעה חדשה</span></div>' : ''}
           <div style="display:inline-block;background:${bubbleBg};border-radius:${borderRad};padding:8px 12px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,0.12);">
-            <div style="font-size:13px;color:#111;line-height:1.5;">${escapeHtml(msg.text)}</div>
+            ${contentHtml}
             <div style="text-align:left;margin-top:4px;">${checks}<span style="font-size:10px;color:#999;">${time}</span></div>
           </div>
         </td>
@@ -152,7 +158,11 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
         messageId,
         inReplyTo: threadId,
         references: threadId,
-        attachments: attachments.map(a => ({ filename: a.filename, content: a.content })),
+        attachments: attachments.map(a => ({
+            filename: a.filename,
+            content:  a.content,
+            ...(a.cid ? { cid: a.cid } : {}),
+        })),
     });
 };
 

@@ -28,12 +28,14 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
         try {
             const buffer = await downloadMedia(msg, sock);
             let filename;
-            if (msgType === 'imageMessage')    filename = `image_${Date.now()}.jpg`;
+            if (msgType === 'imageMessage')         filename = `image_${Date.now()}.jpg`;
             else if (msgType === 'videoMessage')    filename = `video_${Date.now()}.mp4`;
             else if (msgType === 'audioMessage')    filename = `voice_${Date.now()}.ogg`;
             else filename = msg.message.documentMessage.fileName || `doc_${Date.now()}.pdf`;
-            attachments.push({ filename, content: buffer });
-            if (!text) extraText = MEDIA_LABEL[msgType];
+
+            const cid = msgType === 'imageMessage' ? `img_${Date.now()}@bridge` : null;
+            attachments.push({ filename, content: buffer, ...(cid ? { cid } : {}) });
+            if (!text) extraText = cid ? `__IMAGE__${cid}` : MEDIA_LABEL[msgType];
         } catch (err) {
             console.error(`[${tenantId}] שגיאה בהורדת מדיה:`, err.message);
             extraText = MEDIA_LABEL[msgType];
