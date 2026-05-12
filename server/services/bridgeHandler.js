@@ -17,17 +17,26 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     let attachments = [];
     let extraText = '';
 
-    if (['imageMessage', 'videoMessage', 'documentMessage', 'audioMessage'].includes(msgType)) {
+    const MEDIA_LABEL = {
+        imageMessage:    '📷 תמונה',
+        videoMessage:    '🎥 סרטון',
+        audioMessage:    '🎵 הקלטה קולית',
+        documentMessage: '📄 קובץ',
+    };
+
+    if (MEDIA_LABEL[msgType]) {
         try {
             const buffer = await downloadMedia(msg, sock);
-            let filename = 'file';
-            if (msgType === 'imageMessage') filename = `image_${Date.now()}.jpg`;
-            else if (msgType === 'videoMessage') filename = `video_${Date.now()}.mp4`;
-            else if (msgType === 'audioMessage') filename = `voice_${Date.now()}.ogg`;
-            else if (msgType === 'documentMessage') filename = msg.message.documentMessage.fileName || `doc_${Date.now()}.pdf`;
+            let filename;
+            if (msgType === 'imageMessage')    filename = `image_${Date.now()}.jpg`;
+            else if (msgType === 'videoMessage')    filename = `video_${Date.now()}.mp4`;
+            else if (msgType === 'audioMessage')    filename = `voice_${Date.now()}.ogg`;
+            else filename = msg.message.documentMessage.fileName || `doc_${Date.now()}.pdf`;
             attachments.push({ filename, content: buffer });
+            if (!text) extraText = MEDIA_LABEL[msgType];
         } catch (err) {
             console.error(`[${tenantId}] שגיאה בהורדת מדיה:`, err.message);
+            extraText = MEDIA_LABEL[msgType];
         }
     }
 
