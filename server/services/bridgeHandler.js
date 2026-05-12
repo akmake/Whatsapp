@@ -14,6 +14,7 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     const msgType = getMessageType(msg);
 
     let attachments = [];
+    let extraText = '';
 
     if (['imageMessage', 'videoMessage', 'documentMessage', 'audioMessage'].includes(msgType)) {
         try {
@@ -31,21 +32,24 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
 
     if (msgType === 'contactMessage') {
         const vcard = msg.message.contactMessage.vcard;
-        const name = msg.message.contactMessage.displayName || 'contact';
-        attachments.push({ filename: `${name}.vcf`, content: Buffer.from(vcard, 'utf8') });
+        const name = msg.message.contactMessage.displayName || '';
+        const phone = (vcard.match(/TEL[^:]*:([^\r\n]+)/) || [])[1]?.trim() || '';
+        extraText = `📇 איש קשר: ${name}${phone ? `\n📞 ${phone}` : ''}`;
     }
 
     if (msgType === 'contactsArrayMessage') {
         const contacts = msg.message.contactsArrayMessage.contacts || [];
-        for (const c of contacts) {
-            const name = c.displayName || 'contact';
-            attachments.push({ filename: `${name}.vcf`, content: Buffer.from(c.vcard, 'utf8') });
-        }
+        extraText = contacts.map(c => {
+            const name = c.displayName || '';
+            const phone = (c.vcard?.match(/TEL[^:]*:([^\r\n]+)/) || [])[1]?.trim() || '';
+            return `📇 איש קשר: ${name}${phone ? `\n📞 ${phone}` : ''}`;
+        }).join('\n\n');
     }
 
-    if (!text && attachments.length === 0) return;
+    const finalText = [text, extraText].filter(Boolean).join('\n');
+    if (!finalText && attachments.length === 0) return;
 
-    await sendEmailToTenant(tenant, fromPhone, senderName, text, attachments);
+    await sendEmailToTenant(tenant, fromPhone, senderName, finalText, attachments);
     recordWaToEmail(tenantId);
     console.log(`[${tenantId}] הודעה מ-${fromPhone} הועברה למייל`);
 };
