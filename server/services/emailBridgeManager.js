@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import imap from 'imap-simple';
 import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
@@ -100,11 +102,31 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
     }).sort({ createdAt: 1 }).lean();
 
     // Last message is the one we just saved (direction:'in') — mark it as new
-    const imageCid = inlineImageData ? `img-${Date.now()}@bridge` : null;
+    // Build CID map for all images in history (current + previous from disk)
+    const cidMap = new Map(); // msgId → cid
+    const extraAttachments = [];
+    for (const m of history) {
+        if (m.mediaPath) {
+            try {
+                const buf = fs.readFileSync(m.mediaPath);
+                const cid = `img-${m._id}@bridge`;
+                cidMap.set(m._id.toString(), cid);
+                extraAttachments.push({ filename: path.basename(m.mediaPath), content: buf, cid });
+            } catch (e) { /* file missing — skip */ }
+        }
+    }
+    // Current new message image (if any)
+    const newMsgId = history.length ? history[history.length - 1]._id.toString() : null;
+    if (inlineImageData && newMsgId && !cidMap.has(newMsgId)) {
+        const cid = `img-${Date.now()}@bridge`;
+        cidMap.set(newMsgId, cid);
+        extraAttachments.push({ filename: inlineImageData.filename, content: inlineImageData.buffer, cid });
+    }
 
     const bubblesHtml = history.map((m, i) => {
         const isNewMsg = i === history.length - 1 && m.direction === 'in';
-        return renderBubble(m, isNewMsg, isNewMsg ? imageCid : null);
+        const cid = cidMap.get(m._id.toString()) || null;
+        return renderBubble(m, isNewMsg, cid);
     }).join('');
 
     const html = `
@@ -167,7 +189,7 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
         references: threadId,
         attachments: [
             ...attachments.map(a => ({ filename: a.filename, content: a.content })),
-            ...(inlineImageData && imageCid ? [{ filename: inlineImageData.filename, content: inlineImageData.buffer, cid: imageCid }] : []),
+            ...extraAttachments,
         ],
     });
 };
