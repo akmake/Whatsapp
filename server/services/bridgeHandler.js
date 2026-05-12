@@ -6,7 +6,7 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     const tenant = await Tenant.findById(tenantId);
     if (!tenant || !tenant.active) return;
 
-    const fromPhone = extractPhone(msg);
+    const fromPhone = extractPhone(msg, tenantId);
     if (!fromPhone) return;
 
     const senderName = msg.pushName || fromPhone;

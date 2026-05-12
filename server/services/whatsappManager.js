@@ -68,8 +68,15 @@ export const getAllStats = () => {
     return result;
 };
 
-export const extractPhone = (msg) =>
-    (msg.key.remoteJid || '').replace('@s.whatsapp.net', '').replace(/\D/g, '');
+export const extractPhone = (msg, tenantId) => {
+    const jid = msg.key.remoteJid || '';
+    if (jid.endsWith('@lid') && tenantId) {
+        const inst = instances.get(tenantId);
+        const phoneJid = inst?.lidToPhone?.[jid] || '';
+        if (phoneJid) return phoneJid.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+    }
+    return jid.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+};
 
 export const getMessageText = (msg) => {
     const m = msg.message;
@@ -193,6 +200,7 @@ export const startTenant = async (tenantId, onMessage) => {
         reconnectAttempts: existing?.reconnectAttempts ?? 0,
         heartbeatInterval: null,
         lastEventTimestamp: Date.now(),
+        lidToPhone: existing?.lidToPhone ?? {}, // LID → phone JID mapping
         stats: {
             msgsReceived: 0, msgsSent: 0, reconnectCount: 0,
             connectedAt: null, lastMsgAt: null, lastMsgDirection: null,
@@ -288,6 +296,13 @@ export const startTenant = async (tenantId, onMessage) => {
             } catch (err) {
                 console.error(`[${tenantId}] שגיאה בטיפול בהודעה:`, err.message);
             }
+        }
+    });
+
+    sock.ev.on('contacts.upsert', (contacts) => {
+        touch(inst);
+        for (const c of contacts) {
+            if (c.lid && c.id) inst.lidToPhone[c.lid] = c.id;
         }
     });
 
