@@ -9,14 +9,10 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  define: {
+    'import.meta.env.VITE_API_BASE_URL': JSON.stringify('http://46.224.63.165/api'),
+  },
   server: {
     port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5000', // השרת שלנו ירוץ ב-5000
-        changeOrigin: true,
-        secure: false,
-      },
-    },
   },
 });
