@@ -3,15 +3,13 @@ import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
 import { isConnected, sendMessage } from './whatsappManager.js';
 
-// tenantId => { connection, emailInterval, healthInterval, stats, processingEmails }
+// tenantId => { connection, emailInterval, healthInterval, stats }
 const bridges = new Map();
 
-const POLL_INTERVAL    = 10_000;       // 10 שניות — שומר את החיבור חי
-const HEALTH_INTERVAL  = 5 * 60_000;  // 5 דקות — בדיקת חיבור
-const RECONNECT_DELAY  = 30_000;      // 30 שניות בין reconnects
+const processingEmails = new Set(); // מונע עיבוד כפול
 
 // ============================================================
-// ניקוי גוף מייל — מסיר ציטוטים וחתימות
+// ניקוי גוף מייל — זהה ל-sterni
 // ============================================================
 const SIGNATURE_ANCHORS = [
     /טלפון[\s:]*[\d\-\+]/,
@@ -69,125 +67,96 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
 };
 
 // ============================================================
-// פולינג IMAP — Email → WA
+// פולינג — זהה ל-sterni checkForNewEmails
 // ============================================================
-const checkForNewEmails = async (tenantId, tenant) => {
-    // חייב לקחת את החיבור הנוכחי מה-Map — מונע שימוש בחיבור ישן
-    const bridge = bridges.get(tenantId);
-    if (!bridge || bridge.reconnecting || bridge.polling) return;
-    const connection = bridge.connection;
-    if (!connection) return;
-
-    bridge.polling = true;
+const checkForNewEmails = async (tenantId, tenant, connection) => {
     try {
-        const messages = await Promise.race([
-            connection.search(['UNSEEN'], { bodies: ['HEADER', 'TEXT', ''], markSeen: false, struct: true }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('IMAP_SEARCH_TIMEOUT')), 25_000)),
-        ]);
+        if (!connection) return;
 
-        if (messages.length === 0) { bridge.polling = false; return; }
+        const messages = await connection.search(['UNSEEN'], {
+            bodies: ['HEADER', 'TEXT', ''],
+            markSeen: false,
+            struct: true,
+        });
 
-        if (bridges.get(tenantId) !== bridge) { bridge.polling = false; return; } // bridge הוחלף בינתיים
+        if (messages.length === 0) return;
 
-        console.log(`[${tenantId}] פולינג — ${messages.length} מיילים חדשים`);
+        console.log(`[${tenantId}] ${messages.length} מיילים חדשים`);
 
         for (const item of messages) {
             const uid = item.attributes.uid;
-            if (bridge.processingEmails.has(uid)) continue;
-            bridge.processingEmails.add(uid);
+            if (processingEmails.has(`${tenantId}:${uid}`)) continue;
+            processingEmails.add(`${tenantId}:${uid}`);
 
-            try {
-                const all = item.parts.find(p => p.which === '');
-                const parsed = await simpleParser(`Imap-Id: ${uid}\r\n` + all.body);
+            const all = item.parts.find(p => p.which === '');
+            const parsed = await simpleParser(`Imap-Id: ${uid}\r\n` + all.body);
 
-                const fromEmail = parsed.from?.value?.[0]?.address || '';
-                const subject   = parsed.subject || '';
+            const fromEmail = parsed.from?.value?.[0]?.address || '';
+            const subject   = parsed.subject || '';
+            let shouldMarkSeen = false;
 
-                console.log(`[${tenantId}] מייל uid=${uid} מ: ${fromEmail} | נושא: ${subject}`);
-
-                if (fromEmail.toLowerCase() !== tenant.destinationEmail.toLowerCase()) {
-                    console.log(`[${tenantId}] uid=${uid} דחוי — שולח !== ייעד`);
-                    await connection.addFlags(uid, ['\\Seen']);
-                    bridge.processingEmails.delete(uid);
-                    continue;
-                }
-
-                if (!subject.includes('WA_MSG:')) {
-                    console.log(`[${tenantId}] uid=${uid} דחוי — נושא לא מכיל WA_MSG:`);
-                    await connection.addFlags(uid, ['\\Seen']);
-                    bridge.processingEmails.delete(uid);
+            if (fromEmail.toLowerCase() === tenant.destinationEmail.toLowerCase() && subject.includes('WA_MSG:')) {
+                if (!isConnected(tenantId)) {
+                    console.warn(`[${tenantId}] וואצאפ לא מחובר — ננסה שוב`);
+                    processingEmails.delete(`${tenantId}:${uid}`);
                     continue;
                 }
 
                 const match = subject.match(/WA_MSG:\s*([0-9\-\+]+)/);
-                if (!match) {
-                    console.log(`[${tenantId}] uid=${uid} דחוי — לא נמצא מספר`);
-                    await connection.addFlags(uid, ['\\Seen']);
-                    bridge.processingEmails.delete(uid);
-                    continue;
-                }
+                if (match) {
+                    const phone = match[1].trim().replace(/\D/g, '');
+                    const jid   = `${phone}@s.whatsapp.net`;
 
-                const phone = match[1].trim().replace(/\D/g, '');
-                const jid   = `${phone}@s.whatsapp.net`;
+                    try {
+                        const body = cleanEmailBody(parsed.text);
+                        if (body) await sendMessage(tenantId, jid, { text: body });
 
-                if (!isConnected(tenantId)) {
-                    console.warn(`[${tenantId}] וואצאפ לא מחובר — ננסה שוב`);
-                    bridge.processingEmails.delete(uid);
-                    continue;
-                }
+                        if (parsed.attachments?.length) {
+                            for (const att of parsed.attachments) {
+                                let content = {};
+                                if (att.contentType.startsWith('image/'))      content = { image: att.content, caption: att.filename };
+                                else if (att.contentType.startsWith('video/')) content = { video: att.content, caption: att.filename };
+                                else if (att.contentType.startsWith('audio/')) content = { audio: att.content, mimetype: 'audio/mp4', ptt: true };
+                                else                                           content = { document: att.content, mimetype: att.contentType, fileName: att.filename };
+                                await sendMessage(tenantId, jid, content);
+                            }
+                        }
 
-                const body = cleanEmailBody(parsed.text);
-                if (body) {
-                    await sendMessage(tenantId, jid, { text: body });
-                }
+                        console.log(`[${tenantId}] ✓ uid=${uid} → ${phone}`);
+                        const bridge = bridges.get(tenantId);
+                        if (bridge) { bridge.stats.emailToWa++; bridge.stats.lastEmailAt = new Date().toISOString(); }
+                        shouldMarkSeen = true;
 
-                if (parsed.attachments?.length) {
-                    for (const att of parsed.attachments) {
-                        let content = {};
-                        if (att.contentType.startsWith('image/'))      content = { image: att.content, caption: att.filename };
-                        else if (att.contentType.startsWith('video/')) content = { video: att.content, caption: att.filename };
-                        else if (att.contentType.startsWith('audio/')) content = { audio: att.content, mimetype: 'audio/mp4', ptt: true };
-                        else                                           content = { document: att.content, mimetype: att.contentType, fileName: att.filename };
-                        await sendMessage(tenantId, jid, content);
+                    } catch (waErr) {
+                        console.error(`[${tenantId}] שגיאת וואצאפ:`, waErr.message);
+                        processingEmails.delete(`${tenantId}:${uid}`);
                     }
+                } else {
+                    shouldMarkSeen = true;
                 }
+            } else {
+                shouldMarkSeen = true;
+            }
 
+            if (shouldMarkSeen) {
                 await connection.addFlags(uid, ['\\Seen']);
-                bridge.stats.emailToWa++;
-                bridge.stats.lastEmailAt = new Date().toISOString();
-                bridge.processingEmails.delete(uid);
-                console.log(`[${tenantId}] uid=${uid} ✓ תשובה נשלחה לוואצאפ → ${phone}`);
-
-            } catch (err) {
-                console.error(`[${tenantId}] שגיאה בטיפול במייל uid=${uid}:`, err.message);
-                bridge.processingEmails?.delete(uid);
+                processingEmails.delete(`${tenantId}:${uid}`);
             }
         }
-        bridge.polling = false;
     } catch (err) {
-        bridge.polling = false;
         console.error(`[${tenantId}] שגיאת פולינג:`, err.message);
-        const needsReconnect =
-            err.message.includes('Socket') ||
-            err.message.includes('Ended') ||
-            err.message.includes('closed') ||
-            err.message === 'IMAP_SEARCH_TIMEOUT';
-        if (needsReconnect) {
-            const current = bridges.get(tenantId);
-            if (current && current === bridge && !current.reconnecting) {
-                current.reconnecting = true;
-                stopBridge(tenantId);
-                setTimeout(() => startBridge(tenantId, tenant), RECONNECT_DELAY);
-            }
+        if (err.message.includes('Socket') || err.message.includes('Ended')) {
+            clearInterval(bridges.get(tenantId)?.emailInterval);
+            setTimeout(() => startBridge(tenantId, tenant), 5000);
         }
     }
 };
 
 // ============================================================
-// התחלה / עצירה
+// התחלה / עצירה — זהה ל-sterni startEmailListener
 // ============================================================
 export const startBridge = async (tenantId, tenant) => {
-    stopBridge(tenantId); // מנקים קודם אם יש
+    stopBridge(tenantId);
 
     if (!tenant.bridgeEmail || !tenant.bridgeEmailPassword || !tenant.destinationEmail) return;
 
@@ -208,52 +177,44 @@ export const startBridge = async (tenantId, tenant) => {
         await connection.openBox('INBOX');
         console.log(`[${tenantId}] IMAP מחובר`);
     } catch (err) {
-        console.error(`[${tenantId}] IMAP חיבור נכשל:`, err.message, `— ניסיון חוזר בעוד ${RECONNECT_DELAY / 1000}ש׳`);
-        setTimeout(() => startBridge(tenantId, tenant), RECONNECT_DELAY);
+        console.error(`[${tenantId}] IMAP חיבור נכשל:`, err.message, '— ניסיון חוזר בעוד 30ש׳');
+        setTimeout(() => startBridge(tenantId, tenant), 30000);
         return;
     }
 
-    const bridge = {
-        connection,
-        processingEmails: new Set(),
-        emailInterval: null,
-        healthInterval: null,
-        stats: {
-            active: true,
-            emailToWa: 0,
-            waToEmail: 0,
-            lastEmailAt: null,
-            connectedAt: new Date().toISOString(),
-            reconnectCount: (bridges.get(tenantId)?.stats?.reconnectCount ?? 0) + 1,
-        },
+    const stats = {
+        active: true,
+        emailToWa: 0,
+        waToEmail: 0,
+        lastEmailAt: null,
+        connectedAt: new Date().toISOString(),
+        reconnectCount: (bridges.get(tenantId)?.stats?.reconnectCount ?? 0) + 1,
     };
-    bridges.set(tenantId, bridge);
 
-    // פולינג כל 10 שניות — שומר את החיבור חי
-    bridge.emailInterval = setInterval(() => checkForNewEmails(tenantId, tenant), POLL_INTERVAL);
+    // בדיקה מיידית + פולינג כל 10 שניות — בדיוק כמו sterni
+    await checkForNewEmails(tenantId, tenant, connection);
+    const emailInterval = setInterval(() => checkForNewEmails(tenantId, tenant, connection), 10000);
 
-    // health check כל 5 דקות
-    bridge.healthInterval = setInterval(() => {
+    const healthInterval = setInterval(() => {
         try {
             if (!connection || connection.imap.state === 'disconnected') {
-                console.warn(`[${tenantId}] IMAP health: חיבור מת — מתחבר מחדש`);
-                clearInterval(bridge.emailInterval);
-                clearInterval(bridge.healthInterval);
+                console.warn(`[${tenantId}] IMAP health: מת — מתחבר מחדש`);
+                clearInterval(emailInterval);
+                clearInterval(healthInterval);
                 bridges.delete(tenantId);
                 connection = null;
                 setTimeout(() => startBridge(tenantId, tenant), 1000);
             }
         } catch (e) {}
-    }, HEALTH_INTERVAL);
+    }, 5 * 60 * 1000);
 
     connection.on('error', (err) => {
-        const current = bridges.get(tenantId);
-        if (!current || current.connection !== connection || current.reconnecting) return;
         console.error(`[${tenantId}] IMAP שגיאה:`, err.message);
-        current.reconnecting = true;
-        stopBridge(tenantId);
-        setTimeout(() => startBridge(tenantId, tenant), RECONNECT_DELAY);
+        clearInterval(emailInterval);
+        setTimeout(() => startBridge(tenantId, tenant), 10000);
     });
+
+    bridges.set(tenantId, { connection, emailInterval, healthInterval, stats });
 };
 
 export const stopBridge = (tenantId) => {
@@ -283,39 +244,28 @@ export const recordWaToEmail = (tenantId) => {
 // ============================================================
 export const testImapConnection = async (email, password) => {
     let connection;
-
     const attempt = new Promise(async (resolve) => {
         try {
             connection = await imap.connect({
-                imap: {
-                    user: email,
-                    password,
-                    host: 'imap.gmail.com',
-                    port: 993,
-                    tls: true,
-                    authTimeout: 10000,
-                    tlsOptions: { rejectUnauthorized: false },
-                },
+                imap: { user: email, password, host: 'imap.gmail.com', port: 993,
+                        tls: true, authTimeout: 10000, tlsOptions: { rejectUnauthorized: false } },
             });
             await connection.openBox('INBOX');
             resolve({ ok: true });
         } catch (err) {
             const msg = err.message || '';
-            if (msg.toLowerCase().includes('invalid credentials') || msg.toLowerCase().includes('authentication failed')) {
+            if (msg.toLowerCase().includes('invalid credentials') || msg.toLowerCase().includes('authentication failed'))
                 resolve({ ok: false, error: 'סיסמת האפ שגויה או שגישת IMAP לא מופעלת בחשבון' });
-            } else if (msg.toLowerCase().includes('timeout')) {
+            else if (msg.toLowerCase().includes('timeout'))
                 resolve({ ok: false, error: 'תם הזמן — בדוק שגישת IMAP מופעלת בחשבון Gmail' });
-            } else {
+            else
                 resolve({ ok: false, error: `שגיאת חיבור: ${msg}` });
-            }
         } finally {
-            try { connection?.end?.(); } catch (e) { /* ok */ }
+            try { connection?.end?.(); } catch (e) {}
         }
     });
-
     const timeout = new Promise(resolve =>
-        setTimeout(() => resolve({ ok: false, error: 'תם הזמן (20 שניות) — בדוק שגישת IMAP מופעלת ב-Gmail' }), 20000)
+        setTimeout(() => resolve({ ok: false, error: 'תם הזמן (20 שניות)' }), 20000)
     );
-
     return Promise.race([attempt, timeout]);
 };
