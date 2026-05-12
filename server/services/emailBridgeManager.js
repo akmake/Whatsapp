@@ -1,20 +1,14 @@
 import imap from 'imap-simple';
 import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
-import { isConnected, sendMessage, extractPhone, getMessageText, getMessageType, downloadMedia } from './whatsappManager.js';
+import { isConnected, sendMessage } from './whatsappManager.js';
 
-// tenantId => { interval, healthInterval, connection, stats, reconnectAttempts }
+// tenantId => { connection, emailInterval, healthInterval, stats, processingEmails }
 const bridges = new Map();
 
-const getImapReconnectDelay = (attempts) => {
-    const delay = Math.min(BASE_IMAP_RECONNECT * Math.pow(2, attempts), MAX_IMAP_RECONNECT);
-    return delay + delay * Math.random() * 0.3;
-};
-
-const POLL_INTERVAL = 60_000;
-const HEALTH_INTERVAL = 5 * 60_000;
-const BASE_IMAP_RECONNECT = 15_000;
-const MAX_IMAP_RECONNECT = 5 * 60_000;
+const POLL_INTERVAL    = 10_000;       // 10 שניות — שומר את החיבור חי
+const HEALTH_INTERVAL  = 5 * 60_000;  // 5 דקות — בדיקת חיבור
+const RECONNECT_DELAY  = 30_000;      // 30 שניות בין reconnects
 
 // ============================================================
 // ניקוי גוף מייל — מסיר ציטוטים וחתימות
@@ -77,8 +71,10 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
 // ============================================================
 // פולינג IMAP — Email → WA
 // ============================================================
-const pollEmails = async (tenantId, tenant, connection) => {
+const checkForNewEmails = async (tenantId, tenant, connection) => {
     try {
+        if (!connection) return;
+
         const messages = await connection.search(['UNSEEN'], {
             bodies: ['HEADER', 'TEXT', ''],
             markSeen: false,
@@ -90,48 +86,54 @@ const pollEmails = async (tenantId, tenant, connection) => {
         const bridge = bridges.get(tenantId);
         if (!bridge) return;
 
+        console.log(`[${tenantId}] פולינג — ${messages.length} מיילים חדשים`);
+
         for (const item of messages) {
             const uid = item.attributes.uid;
-            if (bridge.processing?.has(uid)) continue;
-            bridge.processing.add(uid);
+            if (bridge.processingEmails.has(uid)) continue;
+            bridge.processingEmails.add(uid);
 
             try {
                 const all = item.parts.find(p => p.which === '');
                 const parsed = await simpleParser(`Imap-Id: ${uid}\r\n` + all.body);
 
                 const fromEmail = parsed.from?.value?.[0]?.address || '';
-                const subject = parsed.subject || '';
+                const subject   = parsed.subject || '';
 
-                // מקבל רק תשובות מהמייל האישי של הלקוח
+                console.log(`[${tenantId}] מייל uid=${uid} מ: ${fromEmail} | נושא: ${subject}`);
+
                 if (fromEmail.toLowerCase() !== tenant.destinationEmail.toLowerCase()) {
+                    console.log(`[${tenantId}] uid=${uid} דחוי — שולח !== ייעד`);
                     await connection.addFlags(uid, ['\\Seen']);
-                    bridge.processing.delete(uid);
+                    bridge.processingEmails.delete(uid);
                     continue;
                 }
 
                 if (!subject.includes('WA_MSG:')) {
+                    console.log(`[${tenantId}] uid=${uid} דחוי — נושא לא מכיל WA_MSG:`);
                     await connection.addFlags(uid, ['\\Seen']);
-                    bridge.processing.delete(uid);
+                    bridge.processingEmails.delete(uid);
                     continue;
                 }
 
                 const match = subject.match(/WA_MSG:\s*([0-9\-\+]+)/);
                 if (!match) {
+                    console.log(`[${tenantId}] uid=${uid} דחוי — לא נמצא מספר`);
                     await connection.addFlags(uid, ['\\Seen']);
-                    bridge.processing.delete(uid);
+                    bridge.processingEmails.delete(uid);
                     continue;
                 }
 
                 const phone = match[1].trim().replace(/\D/g, '');
-                const jid = `${phone}@s.whatsapp.net`;
+                const jid   = `${phone}@s.whatsapp.net`;
 
                 if (!isConnected(tenantId)) {
-                    bridge.processing.delete(uid);
+                    console.warn(`[${tenantId}] וואצאפ לא מחובר — ננסה שוב`);
+                    bridge.processingEmails.delete(uid);
                     continue;
                 }
 
                 const body = cleanEmailBody(parsed.text);
-
                 if (body) {
                     await sendMessage(tenantId, jid, { text: body });
                 }
@@ -139,10 +141,10 @@ const pollEmails = async (tenantId, tenant, connection) => {
                 if (parsed.attachments?.length) {
                     for (const att of parsed.attachments) {
                         let content = {};
-                        if (att.contentType.startsWith('image/')) content = { image: att.content, caption: att.filename };
+                        if (att.contentType.startsWith('image/'))      content = { image: att.content, caption: att.filename };
                         else if (att.contentType.startsWith('video/')) content = { video: att.content, caption: att.filename };
                         else if (att.contentType.startsWith('audio/')) content = { audio: att.content, mimetype: 'audio/mp4', ptt: true };
-                        else content = { document: att.content, mimetype: att.contentType, fileName: att.filename };
+                        else                                           content = { document: att.content, mimetype: att.contentType, fileName: att.filename };
                         await sendMessage(tenantId, jid, content);
                     }
                 }
@@ -150,18 +152,19 @@ const pollEmails = async (tenantId, tenant, connection) => {
                 await connection.addFlags(uid, ['\\Seen']);
                 bridge.stats.emailToWa++;
                 bridge.stats.lastEmailAt = new Date().toISOString();
-                bridge.processing.delete(uid);
+                bridge.processingEmails.delete(uid);
+                console.log(`[${tenantId}] uid=${uid} ✓ תשובה נשלחה לוואצאפ → ${phone}`);
 
             } catch (err) {
                 console.error(`[${tenantId}] שגיאה בטיפול במייל uid=${uid}:`, err.message);
-                bridge.processing?.delete(uid);
+                bridge.processingEmails?.delete(uid);
             }
         }
     } catch (err) {
         console.error(`[${tenantId}] שגיאת פולינג:`, err.message);
-        if (err.message.includes('Socket') || err.message.includes('Ended')) {
+        if (err.message.includes('Socket') || err.message.includes('Ended') || err.message.includes('closed')) {
             stopBridge(tenantId);
-            setTimeout(() => startBridge(tenantId, tenant), 10_000);
+            setTimeout(() => startBridge(tenantId, tenant), RECONNECT_DELAY);
         }
     }
 };
@@ -170,10 +173,13 @@ const pollEmails = async (tenantId, tenant, connection) => {
 // התחלה / עצירה
 // ============================================================
 export const startBridge = async (tenantId, tenant) => {
-    if (bridges.has(tenantId)) stopBridge(tenantId);
+    stopBridge(tenantId); // מנקים קודם אם יש
+
+    if (!tenant.bridgeEmail || !tenant.bridgeEmailPassword || !tenant.destinationEmail) return;
 
     let connection;
     try {
+        console.log(`[${tenantId}] מתחבר ל-IMAP...`);
         connection = await imap.connect({
             imap: {
                 user: tenant.bridgeEmail,
@@ -188,39 +194,39 @@ export const startBridge = async (tenantId, tenant) => {
         await connection.openBox('INBOX');
         console.log(`[${tenantId}] IMAP מחובר`);
     } catch (err) {
-        const attempts = bridges.get(tenantId)?.reconnectAttempts ?? 0;
-        const delay = getImapReconnectDelay(attempts);
-        console.error(`[${tenantId}] IMAP חיבור נכשל:`, err.message, `— ניסיון חוזר בעוד ${Math.round(delay/1000)}ש׳`);
-        // שומרים את מונה הניסיונות גם בין reconnects
-        bridges.set(tenantId, { ...(bridges.get(tenantId) || {}), reconnectAttempts: attempts + 1 });
-        setTimeout(() => startBridge(tenantId, tenant), delay);
+        console.error(`[${tenantId}] IMAP חיבור נכשל:`, err.message, `— ניסיון חוזר בעוד ${RECONNECT_DELAY / 1000}ש׳`);
+        setTimeout(() => startBridge(tenantId, tenant), RECONNECT_DELAY);
         return;
     }
 
-    const prev = bridges.get(tenantId);
     const bridge = {
         connection,
-        processing: new Set(),
-        reconnectAttempts: 0,
+        processingEmails: new Set(),
+        emailInterval: null,
+        healthInterval: null,
         stats: {
             active: true,
             emailToWa: 0,
             waToEmail: 0,
             lastEmailAt: null,
             connectedAt: new Date().toISOString(),
-            reconnectCount: prev?.stats?.reconnectCount != null ? prev.stats.reconnectCount + 1 : 0,
+            reconnectCount: (bridges.get(tenantId)?.stats?.reconnectCount ?? 0) + 1,
         },
-        interval: null,
-        healthInterval: null,
     };
     bridges.set(tenantId, bridge);
 
-    bridge.interval = setInterval(() => pollEmails(tenantId, tenant, connection), POLL_INTERVAL);
+    // פולינג כל 10 שניות — שומר את החיבור חי
+    bridge.emailInterval = setInterval(() => checkForNewEmails(tenantId, tenant, connection), POLL_INTERVAL);
 
-    bridge.healthInterval = setInterval(async () => {
+    // health check כל 5 דקות
+    bridge.healthInterval = setInterval(() => {
         try {
             if (!connection || connection.imap.state === 'disconnected') {
-                stopBridge(tenantId);
+                console.warn(`[${tenantId}] IMAP health: חיבור מת — מתחבר מחדש`);
+                clearInterval(bridge.emailInterval);
+                clearInterval(bridge.healthInterval);
+                bridges.delete(tenantId);
+                connection = null;
                 setTimeout(() => startBridge(tenantId, tenant), 1000);
             }
         } catch (e) {}
@@ -228,18 +234,15 @@ export const startBridge = async (tenantId, tenant) => {
 
     connection.on('error', (err) => {
         console.error(`[${tenantId}] IMAP שגיאה:`, err.message);
-        const attempts = bridges.get(tenantId)?.reconnectAttempts ?? 0;
         stopBridge(tenantId);
-        const delay = getImapReconnectDelay(attempts);
-        bridges.set(tenantId, { reconnectAttempts: attempts + 1 });
-        setTimeout(() => startBridge(tenantId, tenant), delay);
+        setTimeout(() => startBridge(tenantId, tenant), RECONNECT_DELAY);
     });
 };
 
 export const stopBridge = (tenantId) => {
     const bridge = bridges.get(tenantId);
     if (!bridge) return;
-    clearInterval(bridge.interval);
+    clearInterval(bridge.emailInterval);
     clearInterval(bridge.healthInterval);
     try { bridge.connection?.end?.(); } catch (e) {}
     bridges.delete(tenantId);
@@ -258,7 +261,9 @@ export const recordWaToEmail = (tenantId) => {
     bridge.stats.lastEmailAt = new Date().toISOString();
 };
 
-// בדיקת חיבור IMAP חד-פעמית — לא שומרת state
+// ============================================================
+// בדיקת חיבור IMAP חד-פעמית
+// ============================================================
 export const testImapConnection = async (email, password) => {
     let connection;
 
