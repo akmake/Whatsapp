@@ -40,7 +40,7 @@ const cleanEmailBody = (text) => {
 // ============================================================
 const escapeHtml = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 
-const renderBubble = (msg, isNew = false, inlineImage = null) => {
+const renderBubble = (msg, isNew = false, imageCid = null) => {
     const isIn = msg.direction === 'in';
     const time = new Date(msg.createdAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
     const bubbleBg   = isIn ? '#dcf8c6' : '#ffffff';
@@ -51,11 +51,13 @@ const renderBubble = (msg, isNew = false, inlineImage = null) => {
     const checks     = isIn ? '' : '<span style="font-size:12px;color:#53bdeb;margin-right:3px;">✓✓</span>';
 
     let contentHtml;
-    if (isNew && inlineImage) {
-        const caption = msg.text && msg.text !== '📷 תמונה' ? `<div style="font-size:13px;color:#111;margin-top:6px;direction:rtl;">${escapeHtml(msg.text)}</div>` : '';
-        contentHtml = `<img src="data:${inlineImage.mimeType};base64,${inlineImage.base64}" style="max-width:260px;border-radius:6px;display:block;">${caption}`;
+    if (imageCid) {
+        const caption = (msg.text && msg.text !== '📷 תמונה')
+            ? `<div style="font-size:13px;color:#111;margin-top:6px;direction:rtl;">${escapeHtml(msg.text)}</div>`
+            : '';
+        contentHtml = `<img src="cid:${imageCid}" style="max-width:260px;width:100%;border-radius:6px;display:block;">${caption}`;
     } else {
-        contentHtml = `<div style="font-size:13px;color:#111;line-height:1.5;">${escapeHtml(msg.text)}</div>`;
+        contentHtml = `<div style="font-size:13px;color:#111;line-height:1.5;direction:rtl;">${escapeHtml(msg.text)}</div>`;
     }
 
     return `
@@ -74,7 +76,7 @@ const renderBubble = (msg, isNew = false, inlineImage = null) => {
     </td></tr>`;
 };
 
-export const sendEmailToTenant = async (tenant, fromPhone, senderName, textContent, attachments = [], inlineImage = null) => {
+export const sendEmailToTenant = async (tenant, fromPhone, senderName, textContent, attachments = [], inlineImageData = null) => {
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
         port: 587,
@@ -98,9 +100,11 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
     }).sort({ createdAt: 1 }).lean();
 
     // Last message is the one we just saved (direction:'in') — mark it as new
+    const imageCid = inlineImageData ? `img-${Date.now()}@bridge` : null;
+
     const bubblesHtml = history.map((m, i) => {
         const isNewMsg = i === history.length - 1 && m.direction === 'in';
-        return renderBubble(m, isNewMsg, isNewMsg ? inlineImage : null);
+        return renderBubble(m, isNewMsg, isNewMsg ? imageCid : null);
     }).join('');
 
     const html = `
@@ -161,7 +165,10 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
         messageId,
         inReplyTo: threadId,
         references: threadId,
-        attachments: attachments.map(a => ({ filename: a.filename, content: a.content })),
+        attachments: [
+            ...attachments.map(a => ({ filename: a.filename, content: a.content })),
+            ...(inlineImageData && imageCid ? [{ filename: inlineImageData.filename, content: inlineImageData.buffer, cid: imageCid }] : []),
+        ],
     });
 };
 

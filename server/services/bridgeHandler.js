@@ -16,36 +16,43 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
 
     let attachments = [];
     let extraText = '';
-    let inlineImage = null; // { base64, mimeType } — for current message bubble only
+    let inlineImage = null; // { buffer, filename } — for CID embedding in current email only
 
-    const MEDIA_LABEL = {
-        imageMessage:    '📷 תמונה',
-        videoMessage:    '🎥 סרטון',
-        audioMessage:    '🎵 הקלטה קולית',
-        documentMessage: '📄 קובץ',
-    };
-
-    if (MEDIA_LABEL[msgType]) {
+    if (msgType === 'imageMessage') {
         try {
             const buffer = await downloadMedia(msg, sock);
-            let filename;
-            if (msgType === 'imageMessage')      filename = `image_${Date.now()}.jpg`;
-            else if (msgType === 'videoMessage') filename = `video_${Date.now()}.mp4`;
-            else if (msgType === 'audioMessage') filename = `voice_${Date.now()}.ogg`;
-            else filename = msg.message.documentMessage?.fileName || `doc_${Date.now()}.pdf`;
-
-            attachments.push({ filename, content: buffer });
-
-            if (msgType === 'imageMessage') {
-                inlineImage = { base64: buffer.toString('base64'), mimeType: 'image/jpeg' };
-                if (!text) extraText = '📷 תמונה';
-            } else {
-                if (!text) extraText = MEDIA_LABEL[msgType];
-            }
+            const filename = `image_${Date.now()}.jpg`;
+            inlineImage = { buffer, filename };
+            if (!text) extraText = '📷 תמונה';
         } catch (err) {
-            console.error(`[${tenantId}] שגיאה בהורדת מדיה:`, err.message);
-            extraText = MEDIA_LABEL[msgType];
+            console.error(`[${tenantId}] שגיאה בהורדת תמונה:`, err.message);
+            extraText = '📷 תמונה';
         }
+    }
+
+    if (msgType === 'videoMessage') {
+        try {
+            const buffer = await downloadMedia(msg, sock);
+            attachments.push({ filename: `video_${Date.now()}.mp4`, content: buffer });
+            if (!text) extraText = '🎥 סרטון';
+        } catch (err) { extraText = '🎥 סרטון'; }
+    }
+
+    if (msgType === 'audioMessage') {
+        try {
+            const buffer = await downloadMedia(msg, sock);
+            attachments.push({ filename: `voice_${Date.now()}.ogg`, content: buffer });
+            if (!text) extraText = '🎵 הקלטה קולית';
+        } catch (err) { extraText = '🎵 הקלטה קולית'; }
+    }
+
+    if (msgType === 'documentMessage') {
+        try {
+            const buffer = await downloadMedia(msg, sock);
+            const filename = msg.message.documentMessage?.fileName || `doc_${Date.now()}.pdf`;
+            attachments.push({ filename, content: buffer });
+            if (!text) extraText = `📄 ${filename}`;
+        } catch (err) { extraText = '📄 קובץ'; }
     }
 
     if (msgType === 'contactMessage') {
@@ -65,9 +72,9 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     }
 
     const finalText = [text, extraText].filter(Boolean).join('\n');
-    if (!finalText && attachments.length === 0) return;
+    if (!finalText && attachments.length === 0 && !inlineImage) return;
 
-    await Message.create({ tenantId, phone: fromPhone, senderName, direction: 'in', text: finalText });
+    await Message.create({ tenantId, phone: fromPhone, senderName, direction: 'in', text: finalText || '📷 תמונה' });
 
     await sendEmailToTenant(tenant, fromPhone, senderName, finalText, attachments, inlineImage);
     recordWaToEmail(tenantId);
