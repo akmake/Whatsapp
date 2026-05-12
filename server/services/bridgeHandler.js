@@ -16,6 +16,7 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
 
     let attachments = [];
     let extraText = '';
+    let inlineImage = null; // { base64, mimeType } — for current message bubble only
 
     const MEDIA_LABEL = {
         imageMessage:    '📷 תמונה',
@@ -28,14 +29,19 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
         try {
             const buffer = await downloadMedia(msg, sock);
             let filename;
-            if (msgType === 'imageMessage')         filename = `image_${Date.now()}.jpg`;
-            else if (msgType === 'videoMessage')    filename = `video_${Date.now()}.mp4`;
-            else if (msgType === 'audioMessage')    filename = `voice_${Date.now()}.ogg`;
-            else filename = msg.message.documentMessage.fileName || `doc_${Date.now()}.pdf`;
+            if (msgType === 'imageMessage')      filename = `image_${Date.now()}.jpg`;
+            else if (msgType === 'videoMessage') filename = `video_${Date.now()}.mp4`;
+            else if (msgType === 'audioMessage') filename = `voice_${Date.now()}.ogg`;
+            else filename = msg.message.documentMessage?.fileName || `doc_${Date.now()}.pdf`;
 
-            const cid = msgType === 'imageMessage' ? `img_${Date.now()}@bridge` : null;
-            attachments.push({ filename, content: buffer, ...(cid ? { cid } : {}) });
-            if (!text) extraText = cid ? `__IMAGE__${cid}` : MEDIA_LABEL[msgType];
+            attachments.push({ filename, content: buffer });
+
+            if (msgType === 'imageMessage') {
+                inlineImage = { base64: buffer.toString('base64'), mimeType: 'image/jpeg' };
+                if (!text) extraText = '📷 תמונה';
+            } else {
+                if (!text) extraText = MEDIA_LABEL[msgType];
+            }
         } catch (err) {
             console.error(`[${tenantId}] שגיאה בהורדת מדיה:`, err.message);
             extraText = MEDIA_LABEL[msgType];
@@ -63,7 +69,7 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
 
     await Message.create({ tenantId, phone: fromPhone, senderName, direction: 'in', text: finalText });
 
-    await sendEmailToTenant(tenant, fromPhone, senderName, finalText, attachments);
+    await sendEmailToTenant(tenant, fromPhone, senderName, finalText, attachments, inlineImage);
     recordWaToEmail(tenantId);
     console.log(`[${tenantId}] הודעה מ-${fromPhone} הועברה למייל`);
 };

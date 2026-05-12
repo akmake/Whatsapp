@@ -40,21 +40,23 @@ const cleanEmailBody = (text) => {
 // ============================================================
 const escapeHtml = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 
-const renderBubble = (msg, isNew = false) => {
+const renderBubble = (msg, isNew = false, inlineImage = null) => {
     const isIn = msg.direction === 'in';
     const time = new Date(msg.createdAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-    const bubbleBg   = isIn  ? '#dcf8c6' : '#ffffff';
-    const borderRad  = isIn  ? '8px 0px 8px 8px' : '0px 8px 8px 8px';
-    const align      = isIn  ? 'right' : 'left';
-    const tdEmpty    = isIn  ? '<td width="15%"></td>' : '';
+    const bubbleBg   = isIn ? '#dcf8c6' : '#ffffff';
+    const borderRad  = isIn ? '8px 0px 8px 8px' : '0px 8px 8px 8px';
+    const align      = isIn ? 'right' : 'left';
+    const tdEmpty    = isIn ? '<td width="15%"></td>' : '';
     const tdEmptyEnd = !isIn ? '<td width="15%"></td>' : '';
-    const checks     = isIn  ? '' : '<span style="font-size:12px;color:#53bdeb;margin-right:3px;">✓✓</span>';
+    const checks     = isIn ? '' : '<span style="font-size:12px;color:#53bdeb;margin-right:3px;">✓✓</span>';
 
-    const isInlineImage = msg.text?.startsWith('__IMAGE__');
-    const cid = isInlineImage ? msg.text.replace('__IMAGE__', '') : null;
-    const contentHtml = isInlineImage
-        ? `<img src="cid:${cid}" style="max-width:240px;border-radius:6px;display:block;">`
-        : `<div style="font-size:13px;color:#111;line-height:1.5;">${escapeHtml(msg.text)}</div>`;
+    let contentHtml;
+    if (isNew && inlineImage) {
+        const caption = msg.text && msg.text !== '📷 תמונה' ? `<div style="font-size:13px;color:#111;margin-top:6px;direction:rtl;">${escapeHtml(msg.text)}</div>` : '';
+        contentHtml = `<img src="data:${inlineImage.mimeType};base64,${inlineImage.base64}" style="max-width:260px;border-radius:6px;display:block;">${caption}`;
+    } else {
+        contentHtml = `<div style="font-size:13px;color:#111;line-height:1.5;">${escapeHtml(msg.text)}</div>`;
+    }
 
     return `
     <tr><td style="padding:3px 0;">
@@ -72,7 +74,7 @@ const renderBubble = (msg, isNew = false) => {
     </td></tr>`;
 };
 
-export const sendEmailToTenant = async (tenant, fromPhone, senderName, textContent, attachments = []) => {
+export const sendEmailToTenant = async (tenant, fromPhone, senderName, textContent, attachments = [], inlineImage = null) => {
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
         port: 587,
@@ -96,9 +98,10 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
     }).sort({ createdAt: 1 }).lean();
 
     // Last message is the one we just saved (direction:'in') — mark it as new
-    const bubblesHtml = history.map((m, i) =>
-        renderBubble(m, i === history.length - 1 && m.direction === 'in')
-    ).join('');
+    const bubblesHtml = history.map((m, i) => {
+        const isNewMsg = i === history.length - 1 && m.direction === 'in';
+        return renderBubble(m, isNewMsg, isNewMsg ? inlineImage : null);
+    }).join('');
 
     const html = `
 <!DOCTYPE html>
@@ -158,11 +161,7 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
         messageId,
         inReplyTo: threadId,
         references: threadId,
-        attachments: attachments.map(a => ({
-            filename: a.filename,
-            content:  a.content,
-            ...(a.cid ? { cid: a.cid } : {}),
-        })),
+        attachments: attachments.map(a => ({ filename: a.filename, content: a.content })),
     });
 };
 
