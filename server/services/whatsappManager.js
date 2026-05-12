@@ -188,6 +188,17 @@ export const startTenant = async (tenantId, onMessage) => {
     const sessionDir = getSessionDir(tenantId);
     if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
 
+    // Build LID → phone mapping from session files (lid-mapping-{phone}.json contain the LID)
+    const lidToPhone = existing?.lidToPhone ?? {};
+    try {
+        const files = fs.readdirSync(sessionDir).filter(f => f.startsWith('lid-mapping-') && !f.includes('_reverse'));
+        for (const file of files) {
+            const phone = file.replace('lid-mapping-', '').replace('.json', '');
+            const lid = JSON.parse(fs.readFileSync(path.join(sessionDir, file), 'utf8'));
+            if (lid) lidToPhone[`${lid}@lid`] = `${phone}@s.whatsapp.net`;
+        }
+    } catch (e) { /* ok if no files yet */ }
+
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     const { version } = await fetchLatestBaileysVersion();
 
@@ -200,7 +211,7 @@ export const startTenant = async (tenantId, onMessage) => {
         reconnectAttempts: existing?.reconnectAttempts ?? 0,
         heartbeatInterval: null,
         lastEventTimestamp: Date.now(),
-        lidToPhone: existing?.lidToPhone ?? {}, // LID → phone JID mapping
+        lidToPhone, // LID → phone JID mapping (loaded from session files)
         stats: {
             msgsReceived: 0, msgsSent: 0, reconnectCount: 0,
             connectedAt: null, lastMsgAt: null, lastMsgDirection: null,
