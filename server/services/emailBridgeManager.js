@@ -48,8 +48,8 @@ const cleanEmailBody = (text) => {
 export const sendEmailToTenant = async (tenant, fromPhone, senderName, textContent, attachments = []) => {
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
+        port: 587,
+        secure: false,
         auth: { user: tenant.bridgeEmail, pass: tenant.bridgeEmailPassword },
     });
 
