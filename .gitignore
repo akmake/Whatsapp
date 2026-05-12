@@ -53,3 +53,6 @@ coverage/
 
 # WhatsApp sessions
 server/sessions/
+
+# WhatsApp downloaded media
+server/media/

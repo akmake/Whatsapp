@@ -45,8 +45,9 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     if (msgType === 'videoMessage') {
         try {
             const buffer = await downloadMedia(msg, sock);
-            attachments.push({ filename: `video_${Date.now()}.mp4`, content: buffer });
-            if (!text) extraText = '🎥 סרטון';
+            const filename = `video_${Date.now()}.mp4`;
+            attachments.push({ filename, content: buffer });
+            extraText = `🎥 ${filename}`;
         } catch (err) {
             console.error(`[${tenantId}] שגיאת הורדת סרטון:`, err.message);
             extraText = '🎥 סרטון';
@@ -56,8 +57,9 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     if (msgType === 'audioMessage') {
         try {
             const buffer = await downloadMedia(msg, sock);
-            attachments.push({ filename: `voice_${Date.now()}.ogg`, content: buffer });
-            if (!text) extraText = '🎵 הקלטה קולית';
+            const filename = `voice_${Date.now()}.ogg`;
+            attachments.push({ filename, content: buffer });
+            extraText = '🎵 הקלטה קולית';
         } catch (err) {
             console.error(`[${tenantId}] שגיאת הורדת אודיו:`, err.message);
             extraText = '🎵 הקלטה קולית';
@@ -68,12 +70,13 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
         try {
             const buffer = await downloadMedia(msg, sock);
             const filename = msg.message.documentMessage?.fileName || `doc_${Date.now()}.pdf`;
+            const sizeMB = (buffer.length / 1024 / 1024).toFixed(1);
             attachments.push({ filename, content: buffer });
-            if (!text) extraText = `📄 ${filename}`;
+            extraText = `📄 ${filename}||${sizeMB}MB`;
             console.log(`[${tenantId}] מסמך: ${filename} (${buffer.length} bytes)`);
         } catch (err) {
             console.error(`[${tenantId}] שגיאת הורדת מסמך:`, err.message);
-            extraText = '📄 קובץ';
+            extraText = '📄 קובץ||';
         }
     }
 
