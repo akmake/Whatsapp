@@ -67,8 +67,15 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
   <tr><td align="center">
     <table width="100%" cellpadding="0" cellspacing="0" style="max-width:540px;">
 
+      <!-- Reply CTA -->
+      <tr><td style="background:#25d366;border-radius:12px 12px 0 0;padding:10px 18px;text-align:center;">
+        <div style="color:#fff;font-size:14px;font-weight:bold;">
+          ↩ לחץ Reply וכתוב את תשובתך
+        </div>
+      </td></tr>
+
       <!-- Header -->
-      <tr><td style="background:#075e54;border-radius:12px 12px 0 0;padding:14px 18px;">
+      <tr><td style="background:#075e54;padding:14px 18px;">
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td style="width:44px;vertical-align:middle;">
@@ -91,7 +98,6 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
       <tr><td style="background:#e5ddd5;padding:16px 12px;">
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
-            <!-- bubble pushed to right -->
             <td width="15%"></td>
             <td width="85%" align="right">
               <div style="display:inline-block;background:#dcf8c6;border-radius:8px 0px 8px 8px;padding:10px 14px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,0.15);">
@@ -106,10 +112,9 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
         </table>
       </td></tr>
 
-      <!-- Reply divider -->
-      <tr><td style="background:#fff;border-top:1px solid #e0e0e0;border-radius:0 0 12px 12px;padding:12px 18px;text-align:center;">
-        <div style="color:#888;font-size:12px;margin-bottom:4px;">↑ &nbsp; כתוב את תשובתך מעל הקו &nbsp; ↑</div>
-        <div style="border-top:2px dashed #ccc;margin:8px 0;"></div>
+      <!-- Separator (parser uses this to strip quoted content) -->
+      <tr><td style="background:#f7f7f7;border-top:1px solid #e0e0e0;border-radius:0 0 12px 12px;padding:8px 18px;text-align:center;">
+        <div style="border-top:2px dashed #ddd;margin:4px 0;"></div>
       </td></tr>
 
     </table>
