@@ -71,20 +71,23 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
 // ============================================================
 // פולינג IMAP — Email → WA
 // ============================================================
-const checkForNewEmails = async (tenantId, tenant, connection) => {
+const checkForNewEmails = async (tenantId, tenant) => {
+    // חייב לקחת את החיבור הנוכחי מה-Map — מונע שימוש בחיבור ישן
+    const bridge = bridges.get(tenantId);
+    if (!bridge || bridge.reconnecting || bridge.polling) return;
+    const connection = bridge.connection;
+    if (!connection) return;
+
+    bridge.polling = true;
     try {
-        if (!connection) return;
+        const messages = await Promise.race([
+            connection.search(['UNSEEN'], { bodies: ['HEADER', 'TEXT', ''], markSeen: false, struct: true }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('IMAP_SEARCH_TIMEOUT')), 25_000)),
+        ]);
 
-        const messages = await connection.search(['UNSEEN'], {
-            bodies: ['HEADER', 'TEXT', ''],
-            markSeen: false,
-            struct: true,
-        });
+        if (messages.length === 0) { bridge.polling = false; return; }
 
-        if (messages.length === 0) return;
-
-        const bridge = bridges.get(tenantId);
-        if (!bridge) return;
+        if (bridges.get(tenantId) !== bridge) { bridge.polling = false; return; } // bridge הוחלף בינתיים
 
         console.log(`[${tenantId}] פולינג — ${messages.length} מיילים חדשים`);
 
@@ -160,11 +163,22 @@ const checkForNewEmails = async (tenantId, tenant, connection) => {
                 bridge.processingEmails?.delete(uid);
             }
         }
+        bridge.polling = false;
     } catch (err) {
+        bridge.polling = false;
         console.error(`[${tenantId}] שגיאת פולינג:`, err.message);
-        if (err.message.includes('Socket') || err.message.includes('Ended') || err.message.includes('closed')) {
-            stopBridge(tenantId);
-            setTimeout(() => startBridge(tenantId, tenant), RECONNECT_DELAY);
+        const needsReconnect =
+            err.message.includes('Socket') ||
+            err.message.includes('Ended') ||
+            err.message.includes('closed') ||
+            err.message === 'IMAP_SEARCH_TIMEOUT';
+        if (needsReconnect) {
+            const current = bridges.get(tenantId);
+            if (current && current === bridge && !current.reconnecting) {
+                current.reconnecting = true;
+                stopBridge(tenantId);
+                setTimeout(() => startBridge(tenantId, tenant), RECONNECT_DELAY);
+            }
         }
     }
 };
@@ -216,7 +230,7 @@ export const startBridge = async (tenantId, tenant) => {
     bridges.set(tenantId, bridge);
 
     // פולינג כל 10 שניות — שומר את החיבור חי
-    bridge.emailInterval = setInterval(() => checkForNewEmails(tenantId, tenant, connection), POLL_INTERVAL);
+    bridge.emailInterval = setInterval(() => checkForNewEmails(tenantId, tenant), POLL_INTERVAL);
 
     // health check כל 5 דקות
     bridge.healthInterval = setInterval(() => {
@@ -233,7 +247,10 @@ export const startBridge = async (tenantId, tenant) => {
     }, HEALTH_INTERVAL);
 
     connection.on('error', (err) => {
+        const current = bridges.get(tenantId);
+        if (!current || current.connection !== connection || current.reconnecting) return;
         console.error(`[${tenantId}] IMAP שגיאה:`, err.message);
+        current.reconnecting = true;
         stopBridge(tenantId);
         setTimeout(() => startBridge(tenantId, tenant), RECONNECT_DELAY);
     });
