@@ -46,12 +46,7 @@ router.put('/:id/email-config', async (req, res) => {
         return res.status(400).json({ error: 'כל שדות המייל הם חובה' });
     }
 
-    // בדיקת חיבור IMAP לפני שמירה
-    const test = await testImapConnection(bridgeEmail, bridgeEmailPassword);
-    if (!test.ok) {
-        return res.status(400).json({ error: test.error });
-    }
-
+    // שומר תמיד, בודק IMAP ומדווח על התוצאה
     const tenant = await Tenant.findByIdAndUpdate(
         req.params.id,
         { bridgeEmail, bridgeEmailPassword, destinationEmail },
@@ -61,9 +56,19 @@ router.put('/:id/email-config', async (req, res) => {
 
     const tenantId = tenant._id.toString();
     stopBridge(tenantId);
-    await startBridge(tenantId, tenant);
 
-    res.json({ ok: true, bridgeEmail: tenant.bridgeEmail, destinationEmail: tenant.destinationEmail });
+    const test = await testImapConnection(bridgeEmail, bridgeEmailPassword);
+    if (test.ok) {
+        await startBridge(tenantId, tenant);
+    }
+
+    res.json({
+        ok: true,
+        imapOk: test.ok,
+        imapError: test.ok ? null : test.error,
+        bridgeEmail: tenant.bridgeEmail,
+        destinationEmail: tenant.destinationEmail,
+    });
 });
 
 // שליחת הודעה חדשה לכל מספר וואצאפ

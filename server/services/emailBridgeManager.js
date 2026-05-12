@@ -261,30 +261,39 @@ export const recordWaToEmail = (tenantId) => {
 // בדיקת חיבור IMAP חד-פעמית — לא שומרת state
 export const testImapConnection = async (email, password) => {
     let connection;
-    try {
-        connection = await imap.connect({
-            imap: {
-                user: email,
-                password,
-                host: 'imap.gmail.com',
-                port: 993,
-                tls: true,
-                authTimeout: 15000,
-                tlsOptions: { rejectUnauthorized: false },
-            },
-        });
-        await connection.openBox('INBOX');
-        return { ok: true };
-    } catch (err) {
-        const msg = err.message || '';
-        if (msg.toLowerCase().includes('invalid credentials') || msg.toLowerCase().includes('authentication failed')) {
-            return { ok: false, error: 'סיסמת האפ שגויה או שגישת IMAP לא מופעלת בחשבון' };
+
+    const attempt = new Promise(async (resolve) => {
+        try {
+            connection = await imap.connect({
+                imap: {
+                    user: email,
+                    password,
+                    host: 'imap.gmail.com',
+                    port: 993,
+                    tls: true,
+                    authTimeout: 10000,
+                    tlsOptions: { rejectUnauthorized: false },
+                },
+            });
+            await connection.openBox('INBOX');
+            resolve({ ok: true });
+        } catch (err) {
+            const msg = err.message || '';
+            if (msg.toLowerCase().includes('invalid credentials') || msg.toLowerCase().includes('authentication failed')) {
+                resolve({ ok: false, error: 'סיסמת האפ שגויה או שגישת IMAP לא מופעלת בחשבון' });
+            } else if (msg.toLowerCase().includes('timeout')) {
+                resolve({ ok: false, error: 'תם הזמן — בדוק שגישת IMAP מופעלת בחשבון Gmail' });
+            } else {
+                resolve({ ok: false, error: `שגיאת חיבור: ${msg}` });
+            }
+        } finally {
+            try { connection?.end?.(); } catch (e) { /* ok */ }
         }
-        if (msg.toLowerCase().includes('timeout')) {
-            return { ok: false, error: 'תם הזמן — בדוק שגישת IMAP מופעלת בחשבון Gmail' };
-        }
-        return { ok: false, error: `שגיאת חיבור: ${msg}` };
-    } finally {
-        try { connection?.end?.(); } catch (e) { /* ok */ }
-    }
+    });
+
+    const timeout = new Promise(resolve =>
+        setTimeout(() => resolve({ ok: false, error: 'תם הזמן (20 שניות) — בדוק שגישת IMAP מופעלת ב-Gmail' }), 20000)
+    );
+
+    return Promise.race([attempt, timeout]);
 };

@@ -291,8 +291,12 @@ function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, onCompose, onEmai
     const saveEmail = async (e) => {
         e.preventDefault(); setSaving(true); setSaveResult(null);
         try {
-            await api.put(`/tenants/${t._id}/email-config`, ef);
-            setSaveResult({ ok: true, msg: '✓ המייל מחובר ופועל' });
+            const res = await api.put(`/tenants/${t._id}/email-config`, ef);
+            if (res.data.imapOk) {
+                setSaveResult({ ok: true, msg: '✓ נשמר והמייל מחובר ופועל' });
+            } else {
+                setSaveResult({ ok: false, msg: `✓ נשמר — אבל חיבור IMAP נכשל: ${res.data.imapError}` });
+            }
             onEmailSaved();
         } catch (err) {
             setSaveResult({ ok: false, msg: err.response?.data?.error || 'שגיאה' });
@@ -344,7 +348,9 @@ function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, onCompose, onEmai
                                 value={ef.bridgeEmail} onChange={e => setEf(p => ({ ...p, bridgeEmail: e.target.value }))} required />
                         </Field>
                         <Field label="App Password" hint="Google Account ← Security ← App Passwords">
-                            <input className="input-base" type="password" placeholder="xxxx xxxx xxxx xxxx"
+                            <input className="input-base font-mono" type="text"
+                                autoComplete="off" autoCorrect="off" spellCheck="false"
+                                placeholder="xxxx xxxx xxxx xxxx"
                                 value={ef.bridgeEmailPassword} onChange={e => setEf(p => ({ ...p, bridgeEmailPassword: e.target.value }))} required />
                         </Field>
                         <Field label="מייל ייעד" hint="המייל האישי של הלקוח — לכאן מגיעות ההודעות ומכאן הוא עונה">
