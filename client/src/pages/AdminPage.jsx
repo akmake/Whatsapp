@@ -401,11 +401,11 @@ function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, onEdit, onCompose
                             <input className="input-base" type="email" placeholder="bridge@gmail.com"
                                 value={ef.bridgeEmail} onChange={e => setEf(p => ({ ...p, bridgeEmail: e.target.value }))} required />
                         </Field>
-                        <Field label="App Password" hint="Google Account ← Security ← App Passwords">
+                        <Field label="App Password" hint="השאר ריק כדי לשמור את הסיסמא הקיימת • Google Account ← Security ← App Passwords">
                             <input className="input-base font-mono" type="text"
                                 autoComplete="off" autoCorrect="off" spellCheck="false"
-                                placeholder="xxxx xxxx xxxx xxxx"
-                                value={ef.bridgeEmailPassword} onChange={e => setEf(p => ({ ...p, bridgeEmailPassword: e.target.value }))} required />
+                                placeholder="xxxx xxxx xxxx xxxx (ריק = ללא שינוי)"
+                                value={ef.bridgeEmailPassword} onChange={e => setEf(p => ({ ...p, bridgeEmailPassword: e.target.value }))} />
                         </Field>
                         <Field label="מייל ייעד" hint="המייל האישי של הלקוח — לכאן מגיעות ההודעות ומכאן הוא עונה">
                             <input className="input-base" type="email" placeholder="client@gmail.com"

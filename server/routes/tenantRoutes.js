@@ -57,22 +57,21 @@ router.put('/:id/info', async (req, res) => {
 // עדכון הגדרות מייל של לקוח
 router.put('/:id/email-config', async (req, res) => {
     const { bridgeEmail, bridgeEmailPassword, destinationEmail } = req.body;
-    if (!bridgeEmail || !bridgeEmailPassword || !destinationEmail) {
-        return res.status(400).json({ error: 'כל שדות המייל הם חובה' });
+    if (!bridgeEmail || !destinationEmail) {
+        return res.status(400).json({ error: 'כתובות המייל הן חובה' });
     }
 
-    // שומר תמיד, בודק IMAP ומדווח על התוצאה
-    const tenant = await Tenant.findByIdAndUpdate(
-        req.params.id,
-        { bridgeEmail, bridgeEmailPassword, destinationEmail },
-        { new: true }
-    );
+    // אם הסיסמא ריקה — שומרים את הקיימת במסד
+    const update = { bridgeEmail, destinationEmail };
+    if (bridgeEmailPassword) update.bridgeEmailPassword = bridgeEmailPassword;
+
+    const tenant = await Tenant.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!tenant) return res.status(404).json({ error: 'לקוח לא נמצא' });
 
     const tenantId = tenant._id.toString();
     stopBridge(tenantId);
 
-    const test = await testImapConnection(bridgeEmail, bridgeEmailPassword);
+    const test = await testImapConnection(tenant.bridgeEmail, tenant.bridgeEmailPassword);
     if (test.ok) {
         await startBridge(tenantId, tenant);
     }
