@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(node -e \"const p = JSON.parse\\(require\\('fs'\\).readFileSync\\('package.json'\\)\\); console.log\\(JSON.stringify\\(p.dependencies, null, 2\\)\\)\")",
-      "Bash(node --input-type=module --experimental-vm-modules -)"
+      "Bash(node --input-type=module --experimental-vm-modules -)",
+      "Bash(pm2 env *)",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(64\\).toString\\('hex'\\)\\)\")",
+      "Bash(curl -s -X POST http://localhost:5002/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"yosefdaean@gmail.com\",\"password\":\"0546205955\"}')",
+      "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\); console.log\\(d.status, d.data?.user?.email || d.message\\)\")",
+      "Bash(pm2 delete *)",
+      "Bash(pm2 save *)"
     ]
   }
 }
