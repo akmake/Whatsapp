@@ -1,9 +1,13 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import connectDB from './config/db.js';
 import globalErrorHandler from './middlewares/errorMiddleware.js';
+import { protect } from './middlewares/authMiddleware.js';
 import AppError from './utils/AppError.js';
+import authRoutes from './routes/authRoutes.js';
 import tenantRoutes from './routes/tenantRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import Tenant from './models/Tenant.js';
@@ -17,19 +21,41 @@ const app = express();
 
 connectDB();
 
+app.use(helmet());
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : ['http://localhost:5173'];
+
 app.use(cors({
-  origin: ['http://localhost:5173'],
-  credentials: true
+  origin: (origin, callback) => {
+    // allow requests with no origin (curl, mobile apps, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  credentials: false,
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 
-app.get('/', (req, res) => {
-  res.json({ status: 'ok' });
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'יותר מדי בקשות, נסה שוב מאוחר יותר.' },
 });
+app.use('/api', globalLimiter);
 
-app.use('/api/tenants', tenantRoutes);
-app.use('/api/dashboard', dashboardRoutes);
+app.get('/', (req, res) => res.json({ status: 'ok' }));
+
+// public
+app.use('/api/auth', authRoutes);
+
+// protected
+app.use('/api/tenants', protect, tenantRoutes);
+app.use('/api/dashboard', protect, dashboardRoutes);
 
 app.all('*', (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
@@ -41,7 +67,6 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
 
-  // הפעלת כל הלקוחות הפעילים בעת אתחול
   try {
     const tenants = await Tenant.find({ active: true });
     console.log(`מאתחל ${tenants.length} לקוחות...`);
