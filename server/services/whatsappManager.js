@@ -13,6 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 export { getMessageText, getMessageType, downloadMedia } from './waMessageUtils.js';
 import { broadcast } from './sseManager.js';
+import { logger } from '../utils/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSIONS_DIR = path.join(__dirname, '../sessions');
@@ -101,6 +102,7 @@ const startHeartbeat = (tenantId, inst) => {
         const silentMin = (Date.now() - inst.lastEventTimestamp) / 60000;
         if (silentMin > 10) {
             console.warn(`[${tenantId}] 💀 heartbeat: שתיקה ${Math.round(silentMin)} דקות`);
+            logger.warn('wa', `heartbeat silence ${Math.round(silentMin)}m`, { tenantId, silentMin });
             try {
                 if (inst.sock?.user) {
                     await inst.sock.sendPresenceUpdate('available');
@@ -111,6 +113,7 @@ const startHeartbeat = (tenantId, inst) => {
                 }
             } catch (err) {
                 console.error(`[${tenantId}] 💀 heartbeat ping נכשל:`, err.message);
+                logger.error('wa', `heartbeat ping failed: ${err.message}`, { tenantId });
                 await forceReconnect(tenantId, 'heartbeat_error');
             }
         }
@@ -243,6 +246,7 @@ export const startTenant = async (tenantId, onMessage) => {
             inst.reconnectLock = false;
             inst.stats.connectedAt = new Date().toISOString();
             console.log(`[${tenantId}] ✅ מחובר`);
+            logger.info('wa', 'connected', { tenantId });
             startHeartbeat(tenantId, inst);
             broadcast('wa_status');
         }
@@ -261,6 +265,7 @@ export const startTenant = async (tenantId, onMessage) => {
             const isRestartRequired = code === DisconnectReason.restartRequired;
 
             console.log(`[${tenantId}] 🔌 מנותק | code=${code} loggedOut=${isLoggedOut}`);
+            logger.warn('wa', `disconnected code=${code}`, { tenantId, code, isLoggedOut });
 
             if (isLoggedOut) {
                 console.warn(`[${tenantId}] ⛔ Logged Out — מוחק session`);

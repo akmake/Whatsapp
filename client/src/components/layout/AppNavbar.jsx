@@ -17,6 +17,10 @@ export default function AppNavbar() {
                         `px-4 py-2 rounded-lg text-sm font-medium transition ${isActive ? 'bg-white/20' : 'text-white/60 hover:text-white hover:bg-white/10'}`}>
                         ניטור
                     </NavLink>
+                    <NavLink to="/logs" className={({ isActive }) =>
+                        `px-4 py-2 rounded-lg text-sm font-medium transition ${isActive ? 'bg-white/20' : 'text-white/60 hover:text-white hover:bg-white/10'}`}>
+                        לוגים
+                    </NavLink>
                 </nav>
             </div>
         </header>

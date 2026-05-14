@@ -1,6 +1,7 @@
 import { startTenant, sleepTenant, waitForConnected } from './whatsappManager.js';
 import { startBridge, stopBridge } from './emailBridgeManager.js';
 import { handleIncomingWAMessage } from './bridgeHandler.js';
+import { logger } from '../utils/logger.js';
 
 const MAX_ACTIVE  = parseInt(process.env.POOL_MAX_ACTIVE     ?? '20');
 const SYNC_WINDOW = parseInt(process.env.POOL_SYNC_WINDOW_MS ?? '15000');
@@ -53,6 +54,7 @@ const runCycle = async (tenantId) => {
         await wait(SYNC_WINDOW);
     } catch (err) {
         console.error(`[pool] שגיאה ${tenantId}:`, err.message);
+        logger.error('pool', `cycle error: ${err.message}`, { tenantId, stack: err.stack });
     } finally {
         if (pool.has(tenantId)) {
             entry.state = 'sleeping';
@@ -154,6 +156,7 @@ const _loop = async () => {
             }
         } catch (err) {
             console.error('[pool] שגיאה בלולאת קונבייר:', err.message);
+            logger.error('pool', `conveyor loop error: ${err.message}`, { stack: err.stack });
         }
 
         await wait(200);

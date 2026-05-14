@@ -4,34 +4,57 @@ import { isConnected, sendMessage } from './whatsappManager.js';
 import { cleanEmailBody, sendEmailToTenant } from './emailRenderer.js';
 import Message from '../models/Message.js';
 import { decrypt } from '../utils/crypto.js';
+import { logger } from '../utils/logger.js';
 
 export { sendEmailToTenant } from './emailRenderer.js';
 
-// callback שמגיע מ-tenantPool — מונע תלות מעגלית
 let _queueSend = null;
 export const registerQueueSend = (fn) => { _queueSend = fn; };
 
-// tenantId => { connection, emailInterval, healthInterval, stats }
+// tenantId → { connection, emailInterval, healthInterval, stats, isPolling, errorStreak }
 const bridges = new Map();
 
 const processingEmails = new Set();
 
+const withTimeout = (promise, ms, label) =>
+    Promise.race([
+        promise,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`timeout:${label}`)), ms)
+        ),
+    ]);
+
 // ─── פולינג IMAP ────────────────────────────────────────────────
 
-const checkForNewEmails = async (tenantId, tenant, connection) => {
+const checkForNewEmails = async (tenantId, tenant, bridge) => {
+    // mutex: אם פולינג קודם עדיין רץ — מדלגים
+    if (bridge.isPolling) return;
+    bridge.isPolling = true;
+
     try {
+        const { connection } = bridge;
         if (!connection) return;
 
-        const searchPromise = connection.search(['UNSEEN'], {
-            bodies: ['HEADER', 'TEXT', ''],
-            markSeen: false,
-            struct: true,
-        });
-        const messages = await Promise.race([
-            searchPromise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('search timeout')), 15000)),
-        ]);
+        let messages;
+        try {
+            messages = await withTimeout(
+                connection.search(['UNSEEN'], {
+                    bodies: ['HEADER', 'TEXT', ''],
+                    markSeen: false,
+                    struct: true,
+                }),
+                15000, 'imap-search'
+            );
+        } catch (searchErr) {
+            bridge.errorStreak = (bridge.errorStreak || 0) + 1;
+            console.error(`[${tenantId}] שגיאת פולינג (streak=${bridge.errorStreak}):`, searchErr.message);
+            logger.error('imap', `poll error streak=${bridge.errorStreak}: ${searchErr.message}`, { tenantId });
+            scheduleRestart(tenantId, tenant, bridge);
+            return;
+        }
 
+        // איפוס errorStreak על הצלחה
+        bridge.errorStreak = 0;
         if (messages.length === 0) return;
 
         console.log(`[${tenantId}] ${messages.length} מיילים חדשים`);
@@ -84,8 +107,8 @@ const checkForNewEmails = async (tenantId, tenant, connection) => {
                             }
                         }
                         console.log(`[${tenantId}] ✓ uid=${uid} → ${phone}`);
-                        const bridge = bridges.get(tenantId);
-                        if (bridge) { bridge.stats.emailToWa++; bridge.stats.lastEmailAt = new Date().toISOString(); }
+                        const b = bridges.get(tenantId);
+                        if (b) { b.stats.emailToWa++; b.stats.lastEmailAt = new Date().toISOString(); }
                     };
 
                     if (isConnected(tenantId)) {
@@ -97,7 +120,6 @@ const checkForNewEmails = async (tenantId, tenant, connection) => {
                             processingEmails.delete(`${tenantId}:${uid}`);
                         }
                     } else if (_queueSend) {
-                        // WA ישן — מעביר לקונבייר עם עדיפות
                         _queueSend(tenantId, doSend);
                         shouldMarkSeen = true;
                     } else {
@@ -111,80 +133,123 @@ const checkForNewEmails = async (tenantId, tenant, connection) => {
             }
 
             if (shouldMarkSeen) {
-                await connection.addFlags(uid, ['\\Seen']);
+                try {
+                    // timeout על addFlags כדי שלא יתקע לנצח
+                    await withTimeout(connection.addFlags(uid, ['\\Seen']), 8000, 'imap-addFlags');
+                } catch (flagErr) {
+                    console.error(`[${tenantId}] addFlags נכשל uid=${uid}:`, flagErr.message);
+                    scheduleRestart(tenantId, tenant, bridge);
+                }
                 processingEmails.delete(`${tenantId}:${uid}`);
             }
         }
-    } catch (err) {
-        console.error(`[${tenantId}] שגיאת פולינג:`, err.message);
-        if (err.message.includes('Socket') || err.message.includes('Ended')) {
-            clearInterval(bridges.get(tenantId)?.emailInterval);
-            setTimeout(() => startBridge(tenantId, tenant), 5000);
-        }
+    } finally {
+        bridge.isPolling = false;
     }
 };
 
-// ─── מחזור חיים של הגשר ─────────────────────────────────────────
+// ─── restart מבוקר עם cooldown ──────────────────────────────────
+
+const restartTimers = new Map();
+
+const scheduleRestart = (tenantId, tenant, bridge) => {
+    if (restartTimers.has(tenantId)) return; // cooldown — כבר ממתין
+    clearInterval(bridge.emailInterval);
+    clearInterval(bridge.healthInterval);
+    bridge.emailInterval = null;
+    bridge.healthInterval = null;
+    const delay = Math.min(5000 * Math.pow(2, bridge.errorStreak || 0), 60000);
+    console.warn(`[${tenantId}] IMAP restart בעוד ${delay / 1000}ש׳`);
+    restartTimers.set(tenantId, setTimeout(() => {
+        restartTimers.delete(tenantId);
+        startBridge(tenantId, tenant);
+    }, delay));
+};
+
+// ─── מחזור חיי הגשר ─────────────────────────────────────────────
 
 export const startBridge = async (tenantId, tenant) => {
     stopBridge(tenantId);
+    clearTimeout(restartTimers.get(tenantId));
+    restartTimers.delete(tenantId);
 
     if (!tenant.bridgeEmail || !tenant.bridgeEmailPassword || !tenant.destinationEmail) return;
 
     let connection;
     try {
         console.log(`[${tenantId}] מתחבר ל-IMAP...`);
-        connection = await imap.connect({
-            imap: {
-                user: tenant.bridgeEmail,
-                password: decrypt(tenant.bridgeEmailPassword),
-                host: 'imap.gmail.com',
-                port: 993,
-                tls: true,
-                authTimeout: 30000,
-                tlsOptions: { rejectUnauthorized: false },
-            },
-        });
-        await connection.openBox('INBOX');
+        connection = await withTimeout(
+            imap.connect({
+                imap: {
+                    user: tenant.bridgeEmail,
+                    password: decrypt(tenant.bridgeEmailPassword),
+                    host: 'imap.gmail.com',
+                    port: 993,
+                    tls: true,
+                    authTimeout: 30000,
+                    tlsOptions: { rejectUnauthorized: false },
+                },
+            }),
+            35000, 'imap-connect'
+        );
+        await withTimeout(connection.openBox('INBOX'), 10000, 'imap-openBox');
         console.log(`[${tenantId}] IMAP מחובר`);
+    logger.info('imap', 'connected', { tenantId, reconnectCount: (bridges.get(tenantId)?.stats?.reconnectCount ?? 0) + 1 });
     } catch (err) {
         console.error(`[${tenantId}] IMAP חיבור נכשל:`, err.message, '— ניסיון חוזר בעוד 30ש׳');
+        logger.error('imap', `connection failed: ${err.message}`, { tenantId });
         setTimeout(() => startBridge(tenantId, tenant), 30000);
         return;
     }
 
+    const prevStats = bridges.get(tenantId)?.stats;
     const stats = {
         active: true,
-        emailToWa: 0,
-        waToEmail: 0,
-        lastEmailAt: null,
+        emailToWa: prevStats?.emailToWa ?? 0,
+        waToEmail: prevStats?.waToEmail ?? 0,
+        lastEmailAt: prevStats?.lastEmailAt ?? null,
         connectedAt: new Date().toISOString(),
-        reconnectCount: (bridges.get(tenantId)?.stats?.reconnectCount ?? 0) + 1,
+        reconnectCount: (prevStats?.reconnectCount ?? 0) + 1,
     };
 
-    await checkForNewEmails(tenantId, tenant, connection);
-    const emailInterval = setInterval(() => checkForNewEmails(tenantId, tenant, connection), 10000);
+    const bridge = {
+        connection,
+        emailInterval: null,
+        healthInterval: null,
+        stats,
+        isPolling: false,
+        errorStreak: 0,
+    };
+    bridges.set(tenantId, bridge);
 
-    const healthInterval = setInterval(() => {
+    // פולינג ראשוני מיידי
+    await checkForNewEmails(tenantId, tenant, bridge);
+
+    // guard: startBridge אחר עשוי להחליף את הגשר בזמן ה-await
+    if (bridges.get(tenantId) !== bridge) return;
+
+    bridge.emailInterval = setInterval(() => {
+        const b = bridges.get(tenantId);
+        if (b !== bridge) { clearInterval(bridge.emailInterval); return; }
+        checkForNewEmails(tenantId, tenant, b);
+    }, 10000);
+
+    bridge.healthInterval = setInterval(() => {
+        const b = bridges.get(tenantId);
+        if (b !== bridge) { clearInterval(bridge.healthInterval); return; }
         try {
             if (!connection || connection.imap.state === 'disconnected') {
                 console.warn(`[${tenantId}] IMAP health: מת — מתחבר מחדש`);
-                clearInterval(emailInterval);
-                clearInterval(healthInterval);
-                bridges.delete(tenantId);
-                connection = null;
-                setTimeout(() => startBridge(tenantId, tenant), 1000);
+                scheduleRestart(tenantId, tenant, b);
             }
         } catch (e) {}
     }, 5 * 60 * 1000);
 
     connection.on('error', (err) => {
         console.error(`[${tenantId}] IMAP שגיאה:`, err.message);
-        clearInterval(emailInterval);
-        setTimeout(() => startBridge(tenantId, tenant), 10000);
+        const b = bridges.get(tenantId);
+        if (b === bridge) scheduleRestart(tenantId, tenant, b);
     });
-
-    bridges.set(tenantId, { connection, emailInterval, healthInterval, stats });
 };
 
 export const stopBridge = (tenantId) => {
@@ -192,6 +257,8 @@ export const stopBridge = (tenantId) => {
     if (!bridge) return;
     clearInterval(bridge.emailInterval);
     clearInterval(bridge.healthInterval);
+    bridge.emailInterval = null;
+    bridge.healthInterval = null;
     try { bridge.connection?.end?.(); } catch (e) {}
     bridges.delete(tenantId);
     console.log(`[${tenantId}] גשר מייל עצר`);

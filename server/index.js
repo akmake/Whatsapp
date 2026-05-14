@@ -8,6 +8,7 @@ import connectDB from './config/db.js';
 import globalErrorHandler from './middlewares/errorMiddleware.js';
 import { protect } from './middlewares/authMiddleware.js';
 import AppError from './utils/AppError.js';
+import { logger, setMongoSink } from './utils/logger.js';
 import authRoutes from './routes/authRoutes.js';
 import tenantRoutes from './routes/tenantRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
@@ -15,24 +16,45 @@ import sseRoutes from './routes/sseRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import noteRoutes from './routes/noteRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
+import logRoutes from './routes/logRoutes.js';
 import Tenant from './models/Tenant.js';
+import LogEntry from './models/LogEntry.js';
 import { poolAdd, startConveyor, poolQueueSend } from './services/tenantPool.js';
 import { registerQueueSend } from './services/emailBridgeManager.js';
 import { startMediaCleanup } from './services/mediaCleanup.js';
 
 dotenv.config();
 
+// ─── crash handlers ───────────────────────────────────────────────
+
 process.on('uncaughtException', (err) => {
+    logger.fatal('crash', `uncaughtException: ${err.message}`, { stack: err.stack });
     console.error('[process] uncaughtException:', err.message, err.stack);
 });
 
 process.on('unhandledRejection', (reason) => {
+    const msg   = reason instanceof Error ? reason.message : String(reason);
+    const stack = reason instanceof Error ? reason.stack   : undefined;
+    logger.error('crash', `unhandledRejection: ${msg}`, { stack });
     console.error('[process] unhandledRejection:', reason);
+});
+
+process.on('SIGTERM', () => {
+    logger.info('server', 'SIGTERM received — graceful shutdown');
 });
 
 const app = express();
 
-connectDB();
+// ─── DB + logger MongoDB sink ─────────────────────────────────────
+
+connectDB().then(() => {
+    // לאחר חיבור DB — מאפשרים כתיבה ל-MongoDB
+    setMongoSink(entry =>
+        LogEntry.create({ ...entry, ts: new Date(entry.ts) })
+    );
+}).catch(() => {});
+
+logger.info('server', 'starting up', { pid: process.pid });
 
 app.set('trust proxy', 1);
 app.use(helmet());
@@ -44,7 +66,6 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 app.use(cors({
   origin: (origin, callback) => {
-    // allow requests with no origin (curl, mobile apps, etc.)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error(`CORS: origin ${origin} not allowed`));
@@ -63,18 +84,27 @@ const globalLimiter = rateLimit({
 });
 app.use('/api', globalLimiter);
 
+// ─── HTTP logging middleware ──────────────────────────────────────
+
+app.use((req, _res, next) => {
+    if (req.path.startsWith('/api/logs') || req.path === '/api/events') return next();
+    logger.debug('http', `${req.method} ${req.path}`);
+    next();
+});
+
 app.get('/', (req, res) => res.json({ status: 'ok' }));
 
 // public
 app.use('/api/auth', authRoutes);
 
 // protected
-app.use('/api/tenants',   protect, tenantRoutes);
-app.use('/api/dashboard', protect, dashboardRoutes);
-app.use('/api/events',                    sseRoutes);
+app.use('/api/tenants',              protect, tenantRoutes);
+app.use('/api/dashboard',            protect, dashboardRoutes);
+app.use('/api/events',                        sseRoutes);
 app.use('/api/tenants/:id/payments', protect, paymentRoutes);
 app.use('/api/tenants/:id/notes',    protect, noteRoutes);
 app.use('/api/audit',                protect, auditRoutes);
+app.use('/api/logs',                          logRoutes);
 
 app.all('*', (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
@@ -84,18 +114,21 @@ app.use(globalErrorHandler);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, async () => {
+  logger.info('server', `listening on port ${PORT}`);
   console.log(`Server running on port ${PORT}`);
 
   try {
     registerQueueSend(poolQueueSend);
     startMediaCleanup();
     const tenants = await Tenant.find({ active: true });
+    logger.info('server', `loading ${tenants.length} tenants into pool`);
     console.log(`טוען ${tenants.length} לקוחות לפול...`);
     for (const tenant of tenants) {
       poolAdd(tenant._id.toString(), tenant);
     }
     startConveyor();
   } catch (err) {
+    logger.error('server', `init error: ${err.message}`, { stack: err.stack });
     console.error('שגיאה באתחול לקוחות:', err.message);
   }
 });
