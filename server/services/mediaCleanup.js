@@ -32,5 +32,5 @@ const run = () => {
 export const startMediaCleanup = () => {
     run();
     setInterval(run, 24 * 60 * 60 * 1000);
-    console.log('[media-cleanup] פעיל — מנקה קבצי מדיה מעל 30 יום');
+    console.log('[media-cleanup] פעיל — מנקה קבצי מדיה מעל 26 שעות');
 };
