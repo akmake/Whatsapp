@@ -81,7 +81,7 @@ const mediaBlock = (mediaType, url, label) => {
 const renderBubble = (msg, isNew, tenantId) => {
     const isIn = msg.direction === 'in';
     const time = new Date(msg.createdAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-    const bubbleBg  = isIn ? '#dcf8c6' : '#ffffff';
+    const bubbleBg  = isIn ? '#ffffff' : '#dcf8c6';
     const borderRad = isIn ? '8px 0px 8px 8px' : '0px 8px 8px 8px';
     const align     = isIn ? 'right' : 'left';
     const tdL       = isIn  ? '<td width="15%"></td>' : '';
