@@ -119,32 +119,36 @@ export const startConveyor = () => {
 
 const _loop = async () => {
     while (loopRunning) {
-        // 1. עדיפות — מיילים שממתינים לשליחה
-        for (const id of [...prioritySet]) {
-            if (activeCount() >= MAX_ACTIVE) break;
-            const e = pool.get(id);
-            if (!e) { prioritySet.delete(id); continue; }
-            if (e.state === 'sleeping') {
-                prioritySet.delete(id);
-                runCycle(id); // fire and forget
-            } else {
-                prioritySet.delete(id); // כבר ער, flush יטפל
-            }
-        }
-
-        // 2. קונבייר — ממלא slots פנויים בסדר מחזורי
-        const ids = [...pool.keys()];
-        if (ids.length > 0) {
-            let checked = 0;
-            while (activeCount() < MAX_ACTIVE && checked < ids.length) {
-                if (conveyorPos >= ids.length) conveyorPos = 0;
-                const id = ids[conveyorPos++];
-                checked++;
+        try {
+            // 1. עדיפות — מיילים שממתינים לשליחה
+            for (const id of [...prioritySet]) {
+                if (activeCount() >= MAX_ACTIVE) break;
                 const e = pool.get(id);
-                if (e?.state === 'sleeping' && !prioritySet.has(id)) {
+                if (!e) { prioritySet.delete(id); continue; }
+                if (e.state === 'sleeping') {
+                    prioritySet.delete(id);
                     runCycle(id); // fire and forget
+                } else {
+                    prioritySet.delete(id); // כבר ער, flush יטפל
                 }
             }
+
+            // 2. קונבייר — ממלא slots פנויים בסדר מחזורי
+            const ids = [...pool.keys()];
+            if (ids.length > 0) {
+                let checked = 0;
+                while (activeCount() < MAX_ACTIVE && checked < ids.length) {
+                    if (conveyorPos >= ids.length) conveyorPos = 0;
+                    const id = ids[conveyorPos++];
+                    checked++;
+                    const e = pool.get(id);
+                    if (e?.state === 'sleeping' && !prioritySet.has(id)) {
+                        runCycle(id); // fire and forget
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('[pool] שגיאה בלולאת קונבייר:', err.message);
         }
 
         await wait(200);

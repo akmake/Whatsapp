@@ -40,8 +40,15 @@ const checkForNewEmails = async (tenantId, tenant, connection) => {
             if (processingEmails.has(`${tenantId}:${uid}`)) continue;
             processingEmails.add(`${tenantId}:${uid}`);
 
-            const all = item.parts.find(p => p.which === '');
-            const parsed = await simpleParser(`Imap-Id: ${uid}\r\n` + all.body);
+            let parsed;
+            try {
+                const all = item.parts.find(p => p.which === '');
+                parsed = await simpleParser(`Imap-Id: ${uid}\r\n` + all.body);
+            } catch (parseErr) {
+                console.error(`[${tenantId}] שגיאת parse uid=${uid}:`, parseErr.message);
+                processingEmails.delete(`${tenantId}:${uid}`);
+                continue;
+            }
 
             const fromEmail = parsed.from?.value?.[0]?.address || '';
             const subject   = parsed.subject || '';

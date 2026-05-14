@@ -16,6 +16,14 @@ import { registerQueueSend } from './services/emailBridgeManager.js';
 
 dotenv.config();
 
+process.on('uncaughtException', (err) => {
+    console.error('[process] uncaughtException:', err.message, err.stack);
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.error('[process] unhandledRejection:', reason);
+});
+
 const app = express();
 
 connectDB();
