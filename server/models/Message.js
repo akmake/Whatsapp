@@ -7,7 +7,7 @@ const messageSchema = new mongoose.Schema({
     direction:  { type: String, enum: ['in', 'out'], required: true },
     text:       { type: String, default: '' },
     mediaPath:  { type: String, default: null }, // path to saved image on disk
-    createdAt:  { type: Date, default: Date.now, index: true },
+    createdAt:  { type: Date, default: Date.now },
 });
 
 messageSchema.index({ tenantId: 1, phone: 1, createdAt: 1 });
