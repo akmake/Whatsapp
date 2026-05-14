@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>הסכם שירות — גרסת בטא</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700&display=swap');
+
+  /* ── Reset & base ─────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { font-size: 14px; }
+
+  body {
+    font-family: 'Assistant', 'David', 'Arial Hebrew', Arial, sans-serif;
+    color: #1a1a2e;
+    background: #f8f8f6;
+    direction: rtl;
+    line-height: 1.7;
+  }
+
+  /* ── Page wrapper (screen preview) ────────────── */
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 20px auto;
+    background: #fff;
+    box-shadow: 0 4px 40px rgba(0,0,0,.12);
+    padding: 18mm 18mm 20mm 18mm;
+    position: relative;
+  }
+
+  /* ── Header ────────────────────────────────────── */
+  .doc-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding-bottom: 10mm;
+    border-bottom: 2px solid #1a1a2e;
+    margin-bottom: 8mm;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .brand-icon {
+    width: 42px;
+    height: 42px;
+    background: #1a1a2e;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .brand-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a1a2e;
+    letter-spacing: -.3px;
+  }
+
+  .brand-sub {
+    font-size: 11px;
+    color: #7a7a8a;
+    font-weight: 400;
+    margin-top: 1px;
+  }
+
+  .doc-meta {
+    text-align: left;
+  }
+
+  .doc-meta-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    color: #7a7a8a;
+    margin-bottom: 2px;
+  }
+
+  .doc-meta-value {
+    font-size: 11.5px;
+    color: #1a1a2e;
+    font-weight: 500;
+  }
+
+  /* ── Title band ─────────────────────────────────── */
+  .title-band {
+    background: #1a1a2e;
+    color: #fff;
+    border-radius: 10px;
+    padding: 7mm 8mm;
+    margin-bottom: 8mm;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .title-band h1 {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -.4px;
+  }
+
+  .title-band h1 span {
+    font-weight: 300;
+    opacity: .7;
+    font-size: 14px;
+    display: block;
+    margin-top: 2px;
+  }
+
+  .beta-pill {
+    background: #e63946;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+
+  /* ── Parties section ────────────────────────────── */
+  .parties {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5mm;
+    margin-bottom: 8mm;
+  }
+
+  .party-card {
+    border: 1.5px solid #e8e8f0;
+    border-radius: 10px;
+    padding: 5mm 6mm;
+  }
+
+  .party-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .6px;
+    color: #7a7a8a;
+    text-transform: uppercase;
+    margin-bottom: 4mm;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .party-title::before {
+    content: '';
+    display: inline-block;
+    width: 12px;
+    height: 2px;
+    background: #1a1a2e;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .party-field {
+    margin-bottom: 4mm;
+  }
+
+  .party-field-label {
+    font-size: 10px;
+    color: #9a9aaa;
+    margin-bottom: 1.5mm;
+    font-weight: 500;
+  }
+
+  .party-field-line {
+    border-bottom: 1px solid #d0d0e0;
+    height: 6mm;
+  }
+
+  /* ── Sections ───────────────────────────────────── */
+  .section {
+    margin-bottom: 7mm;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4mm;
+  }
+
+  .section-num {
+    width: 24px;
+    height: 24px;
+    background: #1a1a2e;
+    color: #fff;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .section-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #1a1a2e;
+    letter-spacing: -.2px;
+  }
+
+  .section p {
+    font-size: 12.5px;
+    color: #3a3a4e;
+    line-height: 1.75;
+    padding-right: 32px;
+  }
+
+  .section ul {
+    padding-right: 32px;
+    list-style: none;
+  }
+
+  .section ul li {
+    font-size: 12.5px;
+    color: #3a3a4e;
+    line-height: 1.75;
+    padding-right: 12px;
+    position: relative;
+  }
+
+  .section ul li::before {
+    content: '·';
+    position: absolute;
+    right: 0;
+    color: #1a1a2e;
+    font-weight: 700;
+  }
+
+  /* ── Highlight boxes ────────────────────────────── */
+  .highlight-box {
+    border-radius: 8px;
+    padding: 5mm 6mm;
+    margin: 4mm 0;
+  }
+
+  .highlight-box.commitment {
+    background: #f0faf4;
+    border: 1.5px solid #2d9e5f;
+  }
+
+  .highlight-box.commitment .box-title {
+    color: #1a7a45;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 2mm;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .highlight-box.commitment p {
+    color: #1f5c35;
+    font-size: 12.5px;
+    line-height: 1.7;
+    padding-right: 0;
+  }
+
+  .highlight-box.beta-warn {
+    background: #fff8f0;
+    border: 1.5px solid #e07a2f;
+  }
+
+  .highlight-box.beta-warn .box-title {
+    color: #b35a10;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 2mm;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .highlight-box.beta-warn p {
+    color: #7a3a0a;
+    font-size: 12.5px;
+    line-height: 1.7;
+    padding-right: 0;
+  }
+
+  /* ── Divider ─────────────────────────────────────── */
+  .divider {
+    border: none;
+    border-top: 1px solid #e8e8f0;
+    margin: 6mm 0;
+  }
+
+  /* ── Signatures ─────────────────────────────────── */
+  .signatures {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12mm;
+    margin-top: 10mm;
+    padding-top: 8mm;
+    border-top: 2px solid #1a1a2e;
+  }
+
+  .sig-block {
+    display: flex;
+    flex-direction: column;
+    gap: 5mm;
+  }
+
+  .sig-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #7a7a8a;
+    text-transform: uppercase;
+    letter-spacing: .6px;
+  }
+
+  .sig-field {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5mm;
+  }
+
+  .sig-field-label {
+    font-size: 10px;
+    color: #9a9aaa;
+    font-weight: 500;
+  }
+
+  .sig-field-line {
+    border-bottom: 1px solid #c0c0d0;
+    height: 8mm;
+  }
+
+  /* ── Footer ──────────────────────────────────────── */
+  .doc-footer {
+    margin-top: 10mm;
+    padding-top: 4mm;
+    border-top: 1px solid #e8e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .footer-note {
+    font-size: 9.5px;
+    color: #aaaabc;
+  }
+
+  .footer-page {
+    font-size: 9.5px;
+    color: #aaaabc;
+  }
+
+  /* ── Print ───────────────────────────────────────── */
+  @media print {
+    body {
+      background: #fff;
+    }
+
+    .page {
+      width: 100%;
+      min-height: auto;
+      margin: 0;
+      padding: 15mm 18mm 18mm 18mm;
+      box-shadow: none;
+    }
+
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ── Header ─────────────────────────────────────── -->
+  <div class="doc-header">
+    <div class="brand">
+      <div class="brand-icon">💬</div>
+      <div>
+        <div class="brand-name">Bridge Manager</div>
+        <div class="brand-sub">שירות גשר וואטסאפ–מייל</div>
+      </div>
+    </div>
+    <div class="doc-meta">
+      <div class="doc-meta-label">מסמך מספר</div>
+      <div class="doc-meta-value">#______</div>
+      <div class="doc-meta-label" style="margin-top:4px">תאריך חתימה</div>
+      <div class="doc-meta-value">__________ / __________ / __________</div>
+    </div>
+  </div>
+
+  <!-- ── Title band ──────────────────────────────────── -->
+  <div class="title-band">
+    <h1>
+      הסכם שירות — תנאי שימוש
+      <span>הסכם זה מהווה מסמך מחייב בין נותן השירות ללקוח</span>
+    </h1>
+    <div class="beta-pill">Beta</div>
+  </div>
+
+  <!-- ── Parties ─────────────────────────────────────── -->
+  <div class="parties">
+    <div class="party-card">
+      <div class="party-title">נותן השירות</div>
+      <div class="party-field">
+        <div class="party-field-label">שם מלא</div>
+        <div class="party-field-line"></div>
+      </div>
+      <div class="party-field">
+        <div class="party-field-label">טלפון / מייל</div>
+        <div class="party-field-line"></div>
+      </div>
+      <div class="party-field" style="margin-bottom:0">
+        <div class="party-field-label">ח.פ / ת.ז</div>
+        <div class="party-field-line"></div>
+      </div>
+    </div>
+    <div class="party-card">
+      <div class="party-title">הלקוח</div>
+      <div class="party-field">
+        <div class="party-field-label">שם מלא / שם עסק</div>
+        <div class="party-field-line"></div>
+      </div>
+      <div class="party-field">
+        <div class="party-field-label">טלפון / מייל</div>
+        <div class="party-field-line"></div>
+      </div>
+      <div class="party-field" style="margin-bottom:0">
+        <div class="party-field-label">ח.פ / ת.ז (אם רלוונטי)</div>
+        <div class="party-field-line"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Section 1 ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <div class="section-title">מהות השירות</div>
+    </div>
+    <p>
+      נותן השירות מעניק ללקוח גישה לפלטפורמת <strong>Bridge Manager</strong> — מערכת תוכנה המאפשרת
+      ניתוב אוטומטי של הודעות וואטסאפ נכנסות לכתובת מייל ייעודית ותגובה עליהן בחזרה ישירות מהמייל.
+      השירות כולל הגדרה ראשונית, תמיכה שוטפת, ועדכוני תוכנה כחלק מההסכם.
+    </p>
+  </div>
+
+  <!-- ── Section 2 ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <div class="section-title">הצהרת גרסת בטא — חשוב לקרוא</div>
+    </div>
+    <div class="highlight-box beta-warn">
+      <div class="box-title">⚠️ גרסת בטא פעילה</div>
+      <p>
+        המערכת המסופקת נמצאת בשלב פיתוח מתקדם — <strong>גרסת בטא (Beta)</strong>. משמעות הדבר היא
+        שהמוצר עובד ומספק את הפונקציות המוצהרות, אך ייתכנו הפסקות שירות, תקלות בלתי צפויות,
+        או ירידות בביצועים. לקוח שנרשם לשירות מצהיר כי הוא מבין ומקבל עובדה זו.
+      </p>
+    </div>
+    <p style="margin-top: 3mm;">
+      נותן השירות יפעל בכל עת לתקן תקלות בהקדם האפשרי ולהבטיח את יציבות המערכת, אך אינו
+      מתחייב לזמינות של 100%.
+    </p>
+  </div>
+
+  <!-- ── Section 3 ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <div class="section-title">זמינות המערכת וטיפול בתקלות</div>
+    </div>
+    <ul>
+      <li>נותן השירות מתחייב לשאוף לזמינות גבוהה ככל האפשר.</li>
+      <li>במקרה של תקלה, יש לדווח לנותן השירות בהודעה ישירה — הטיפול יתחיל תוך 24 שעות בימי עסקים.</li>
+      <li>"נפילת שירות" מוגדרת: אי-יכולת לקבל הודעות וואטסאפ במייל, או לשלוח תשובות בחזרה, לתקופה העולה על 4 שעות רצופות.</li>
+      <li>הפרעות שנגרמות כתוצאה משינויים במדיניות Google, Meta/WhatsApp, או גורמים חיצוניים אחרים אינן נחשבות "נפילת שירות" של נותן השירות.</li>
+    </ul>
+  </div>
+
+  <!-- ── Section 4 ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <div class="section-title">התחייבות החזר כספי</div>
+    </div>
+    <div class="highlight-box commitment">
+      <div class="box-title">✓ ההתחייבות שלנו אליך</div>
+      <p>
+        במקרה שהשירות <strong>נפל ולא פעל</strong> כלל במשך חודש קלנדרי מסוים — ולו יום אחד בלבד
+        שבו הלקוח לא יכול היה להשתמש בשירות בשל תקלה מצד נותן השירות — <strong>יחויב הלקוח
+        אפס עבור אותו חודש</strong>. זאת ללא קשר לשאלה כמה מימי החודש כבר חלפו.
+        <br/><br/>
+        ההחזר יינתן בצורה של זיכוי לחיוב הבא, או החזר כספי מלא לפי בחירת הלקוח.
+      </p>
+    </div>
+    <p style="margin-top: 3mm;">
+      לצורך הפעלת ההתחייבות על הלקוח ליצור קשר עם נותן השירות ולדווח על הנפילה.
+      נותן השירות יאמת את הדיווח מול יומני המערכת ויאשר את הזיכוי בכתב תוך 3 ימי עסקים.
+    </p>
+  </div>
+
+  <hr class="divider" />
+
+  <!-- ── Section 5 ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <div class="section-title">תנאי תשלום</div>
+    </div>
+    <ul>
+      <li>דמי השירות החודשיים: <strong>₪______</strong> לחודש, לפי תכנית <strong>______________</strong>.</li>
+      <li>החיוב מתבצע ב-1 לכל חודש, מראש עבור אותו חודש.</li>
+      <li>אמצעי תשלום מוסכם: <strong>__________________________</strong>.</li>
+      <li>אי-תשלום לאחר 7 ימי אשראי יגרור השעיה זמנית של השירות עד להסדרת החוב.</li>
+    </ul>
+  </div>
+
+  <!-- ── Section 6 ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <div class="section-title">פרטיות ונתונים</div>
+    </div>
+    <p>
+      נותן השירות מתחייב לא להעביר את נתוני הלקוח, לרבות תוכן ההודעות, לגורם שלישי כלשהו
+      אלא על פי דרישה חוקית מפורשת. הנתונים מאוחסנים בצורה מוצפנת ומחולקת. הלקוח הוא
+      הבעלים המלא של נתוניו ויכול לבקש את מחיקתם בכל עת בהתראה של 14 ימים.
+    </p>
+  </div>
+
+  <!-- ── Section 7 ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <div class="section-title">סיום ההסכם</div>
+    </div>
+    <ul>
+      <li>כל צד רשאי לסיים את ההסכם בהתראה של 14 יום מראש בכתב (מייל מספיק).</li>
+      <li>סיום מצד הלקוח לאחר תחילת חודש לא יזכה בהחזר עבור אותו חודש, אלא אם נפל השירות כמפורט בסעיף 4.</li>
+      <li>עם סיום ההסכם, יינתן ללקוח חלון של 30 יום לייצוא נתוניו לפני המחיקה הסופית.</li>
+    </ul>
+  </div>
+
+  <!-- ── Section 8 ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <div class="section-title">שונות</div>
+    </div>
+    <ul>
+      <li>הסכם זה כפוף לדיני מדינת ישראל; סמכות השיפוט — בתי משפט ישראל.</li>
+      <li>שינויים בהסכם יהיו בתוקף רק לאחר הסכמה כתובה של שני הצדדים.</li>
+      <li>ביטול סעיף אחד אינו מבטל את יתר ההסכם.</li>
+    </ul>
+  </div>
+
+  <!-- ── Signatures ──────────────────────────────────── -->
+  <div class="signatures">
+    <div class="sig-block">
+      <div class="sig-title">נותן השירות</div>
+      <div class="sig-field">
+        <div class="sig-field-label">חתימה</div>
+        <div class="sig-field-line"></div>
+      </div>
+      <div class="sig-field">
+        <div class="sig-field-label">שם + תפקיד</div>
+        <div class="sig-field-line"></div>
+      </div>
+      <div class="sig-field">
+        <div class="sig-field-label">תאריך</div>
+        <div class="sig-field-line"></div>
+      </div>
+    </div>
+    <div class="sig-block">
+      <div class="sig-title">הלקוח</div>
+      <div class="sig-field">
+        <div class="sig-field-label">חתימה</div>
+        <div class="sig-field-line"></div>
+      </div>
+      <div class="sig-field">
+        <div class="sig-field-label">שם + תפקיד</div>
+        <div class="sig-field-line"></div>
+      </div>
+      <div class="sig-field">
+        <div class="sig-field-label">תאריך</div>
+        <div class="sig-field-line"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Footer ──────────────────────────────────────── -->
+  <div class="doc-footer">
+    <div class="footer-note">Bridge Manager · גרסת בטא · הסכם שירות</div>
+    <div class="footer-page">עמוד 1 מתוך 1</div>
+  </div>
+
+</div>
+
+</body>
+</html>
