@@ -6,6 +6,7 @@ import Message from '../models/Message.js';
 import { extractPhone } from './whatsappManager.js';
 import { getMessageText, getMessageType, downloadMedia } from './waMessageUtils.js';
 import { sendEmailToTenant, recordWaToEmail } from './emailBridgeManager.js';
+import { broadcast } from './sseManager.js';
 
 const MEDIA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../media');
 if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
@@ -108,5 +109,6 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
 
     await sendEmailToTenant(tenant, fromPhone, senderName, finalText, attachments, inlineImage);
     recordWaToEmail(tenantId);
+    broadcast('message');
     console.log(`[${tenantId}] הודעה מ-${fromPhone} הועברה למייל`);
 };

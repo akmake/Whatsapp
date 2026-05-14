@@ -11,5 +11,6 @@ const messageSchema = new mongoose.Schema({
 });
 
 messageSchema.index({ tenantId: 1, phone: 1, createdAt: 1 });
+messageSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 }); // auto-delete after 30 days
 
 export default mongoose.model('Message', messageSchema);

@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 export { getMessageText, getMessageType, downloadMedia } from './waMessageUtils.js';
+import { broadcast } from './sseManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSIONS_DIR = path.join(__dirname, '../sessions');
@@ -239,11 +240,13 @@ export const startTenant = async (tenantId, onMessage) => {
             inst.stats.connectedAt = new Date().toISOString();
             console.log(`[${tenantId}] ✅ מחובר`);
             startHeartbeat(tenantId, inst);
+            broadcast('wa_status');
         }
 
         if (connection === 'close') {
             stopHeartbeat(inst);
             inst.status = 'disconnected';
+            broadcast('wa_status');
 
             const error = lastDisconnect?.error;
             const code = (error instanceof Boom)
@@ -294,7 +297,18 @@ export const startTenant = async (tenantId, onMessage) => {
     sock.ev.on('contacts.upsert', (contacts) => {
         touch(inst);
         for (const c of contacts) {
-            if (c.lid && c.id) inst.lidToPhone[c.lid] = c.id;
+            if (c.lid && c.id) {
+                inst.lidToPhone[c.lid] = c.id;
+                // Persist to disk so mapping survives sleep/restart
+                const phone = c.id.replace('@s.whatsapp.net', '');
+                const lid   = c.lid.replace('@lid', '');
+                try {
+                    fs.writeFileSync(
+                        path.join(getSessionDir(tenantId), `lid-mapping-${phone}.json`),
+                        JSON.stringify(lid)
+                    );
+                } catch (e) {}
+            }
         }
     });
 

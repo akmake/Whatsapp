@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '@/services/api';
+import { useSSE } from '@/hooks/useSSE';
 import TenantSidebar from '@/components/admin/TenantSidebar';
 import TenantPanel from '@/components/admin/TenantPanel';
 import AddTenantModal from '@/components/admin/modals/AddTenantModal';
@@ -21,11 +22,8 @@ export default function AdminPage() {
         catch (e) { console.error(e); }
     }, []);
 
-    useEffect(() => {
-        fetchTenants();
-        const i = setInterval(fetchTenants, 5000);
-        return () => clearInterval(i);
-    }, [fetchTenants]);
+    useEffect(() => { fetchTenants(); }, [fetchTenants]);
+    useSSE(fetchTenants);
 
     const handleDelete = async (id, name) => {
         if (!confirm(`למחוק את "${name}"?`)) return;

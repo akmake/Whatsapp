@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '@/services/api';
+import { useSSE } from '@/hooks/useSSE';
 import MetricCard from '@/components/dashboard/MetricCard';
 import TenantRow from '@/components/dashboard/TenantRow';
 
@@ -23,11 +24,8 @@ export default function DashboardPage() {
         } catch (e) { console.error(e); }
     }, []);
 
-    useEffect(() => {
-        fetchData();
-        const i = setInterval(fetchData, 4000);
-        return () => clearInterval(i);
-    }, [fetchData]);
+    useEffect(() => { fetchData(); }, [fetchData]);
+    useSSE(fetchData);
 
     if (!data) return (
         <div className="h-full flex items-center justify-center text-[#8696a0]">
@@ -52,7 +50,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-center gap-2 text-xs text-[#8696a0] bg-white px-3 py-1.5 rounded-full shadow-sm">
                         <span className="w-2 h-2 rounded-full bg-[#25D366] animate-pulse" />
-                        כל 4 שניות
+                        עדכון בזמן אמת
                     </div>
                 </div>
 

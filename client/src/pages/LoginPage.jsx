@@ -34,7 +34,7 @@ export default function LoginPage() {
             <Lock size={20} />
           </div>
           <h2 className="text-2xl font-bold text-slate-900">כניסה למורשים בלבד</h2>
-          <p className="text-gray-500 text-sm mt-1">CityLine Systems Management</p>
+          <p className="text-gray-500 text-sm mt-1">Bridge Manager</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">

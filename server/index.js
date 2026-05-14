@@ -11,9 +11,11 @@ import AppError from './utils/AppError.js';
 import authRoutes from './routes/authRoutes.js';
 import tenantRoutes from './routes/tenantRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
+import sseRoutes from './routes/sseRoutes.js';
 import Tenant from './models/Tenant.js';
 import { poolAdd, startConveyor, poolQueueSend } from './services/tenantPool.js';
 import { registerQueueSend } from './services/emailBridgeManager.js';
+import { startMediaCleanup } from './services/mediaCleanup.js';
 
 dotenv.config();
 
@@ -64,8 +66,9 @@ app.get('/', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/auth', authRoutes);
 
 // protected
-app.use('/api/tenants', protect, tenantRoutes);
+app.use('/api/tenants',   protect, tenantRoutes);
 app.use('/api/dashboard', protect, dashboardRoutes);
+app.use('/api/events',    sseRoutes);
 
 app.all('*', (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
@@ -79,6 +82,7 @@ app.listen(PORT, async () => {
 
   try {
     registerQueueSend(poolQueueSend);
+    startMediaCleanup();
     const tenants = await Tenant.find({ active: true });
     console.log(`טוען ${tenants.length} לקוחות לפול...`);
     for (const tenant of tenants) {

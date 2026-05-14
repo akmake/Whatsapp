@@ -5,6 +5,7 @@ import DashboardPage from '@/pages/DashboardPage';
 import LoginPage from '@/pages/LoginPage';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import AppNavbar from '@/components/layout/AppNavbar';
+import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function App() {
@@ -25,11 +26,13 @@ export default function App() {
             <div className="h-screen flex flex-col" dir="rtl">
               <AppNavbar />
               <main className="flex-1 overflow-hidden">
-                <Routes>
-                  <Route path="/" element={<AdminPage />} />
-                  <Route path="/dashboard" element={<DashboardPage />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
+                <ErrorBoundary>
+                  <Routes>
+                    <Route path="/" element={<AdminPage />} />
+                    <Route path="/dashboard" element={<DashboardPage />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </ErrorBoundary>
               </main>
             </div>
           </ProtectedRoute>
