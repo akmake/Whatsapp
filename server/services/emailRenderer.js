@@ -30,7 +30,7 @@ const getTransporter = (tenant) => {
     return transporterCache.get(id);
 };
 
-// ─── ניקוי גוף מייל — חיתוך ציטוטים וחתימות ───────────────────
+// ─── ניקוי גוף מייל ─────────────────────────────────────────────
 
 export const cleanEmailBody = (text) => {
     if (!text) return '';
@@ -48,27 +48,56 @@ export const cleanEmailBody = (text) => {
     return bodyLines.join('\n').trim();
 };
 
-// ─── בניית HTML ─────────────────────────────────────────────────
+// ─── בניית בועת מדיה ────────────────────────────────────────────
 
 const escapeHtml = (s) =>
     (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 
-const renderBubble = (msg, isNew = false, imageUrl = null) => {
+const mediaBlock = (mediaType, url, label) => {
+    if (mediaType === 'image') {
+        return `<img src="${url}" style="max-width:260px;width:100%;border-radius:6px;display:block;">`;
+    }
+
+    const icons = { video: '🎥', audio: '🎵', document: '📄' };
+    const icon  = icons[mediaType] || '📎';
+    const btn   = mediaType === 'audio'    ? '#1a73e8'
+                : mediaType === 'video'    ? '#1a73e8'
+                : /* document */             '#1a73e8';
+
+    return `
+        <a href="${url}" target="_blank" style="
+            display:inline-flex;align-items:center;gap:8px;
+            background:${btn};color:#fff;text-decoration:none;
+            padding:9px 16px;border-radius:8px;font-size:13px;font-weight:bold;
+            direction:rtl;margin:2px 0;max-width:240px;word-break:break-word;
+        ">
+            <span style="font-size:16px;line-height:1;">${icon}</span>
+            <span>${escapeHtml(label)}</span>
+        </a>`;
+};
+
+const renderBubble = (msg, isNew, tenantId) => {
     const isIn = msg.direction === 'in';
     const time = new Date(msg.createdAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
     const bubbleBg  = isIn ? '#dcf8c6' : '#ffffff';
     const borderRad = isIn ? '8px 0px 8px 8px' : '0px 8px 8px 8px';
     const align     = isIn ? 'right' : 'left';
-    const tdL       = isIn ? '<td width="15%"></td>' : '';
+    const tdL       = isIn  ? '<td width="15%"></td>' : '';
     const tdR       = !isIn ? '<td width="15%"></td>' : '';
-    const checks    = isIn ? '' : '<span style="font-size:12px;color:#53bdeb;margin-right:3px;">✓✓</span>';
+    const checks    = isIn  ? '' : '<span style="font-size:12px;color:#53bdeb;margin-right:3px;">✓✓</span>';
 
     let contentHtml;
-    if (imageUrl) {
-        const caption = (msg.text && msg.text !== '📷 תמונה')
-            ? `<div style="font-size:13px;color:#111;margin-top:6px;direction:rtl;">${escapeHtml(msg.text)}</div>`
+    if (msg.mediaPath && msg.mediaType) {
+        const filename = path.basename(msg.mediaPath);
+        const url      = `${PUBLIC_URL}/api/media/${tenantId}/${filename}`;
+        const label    = msg.text && !['📷 תמונה','🎥 סרטון','🎵 הקלטה קולית'].includes(msg.text)
+                         ? msg.text
+                         : filename;
+        const block = mediaBlock(msg.mediaType, url, label);
+        const caption = (msg.text && msg.mediaType !== 'image')
+            ? `<div style="font-size:12px;color:#666;margin-top:4px;direction:rtl;">${escapeHtml(msg.text)}</div>`
             : '';
-        contentHtml = `<img src="${imageUrl}" style="max-width:260px;width:100%;border-radius:6px;display:block;">${caption}`;
+        contentHtml = block + caption;
     } else {
         contentHtml = `<div style="font-size:13px;color:#111;line-height:1.5;direction:rtl;">${escapeHtml(msg.text)}</div>`;
     }
@@ -91,7 +120,7 @@ const renderBubble = (msg, isNew = false, imageUrl = null) => {
 
 // ─── שליחת מייל ─────────────────────────────────────────────────
 
-export const sendEmailToTenant = async (tenant, tenantId, fromPhone, senderName, textContent, attachments = []) => {
+export const sendEmailToTenant = async (tenant, tenantId, fromPhone, senderName, textContent) => {
     const transporter = getTransporter(tenant);
 
     const subject   = `WA_MSG: ${fromPhone}`;
@@ -109,15 +138,9 @@ export const sendEmailToTenant = async (tenant, tenantId, fromPhone, senderName,
         createdAt: { $gte: startOfDay },
     }).sort({ createdAt: 1 }).lean();
 
-    const bubblesHtml = history.map((m, i) => {
-        const isNewMsg = i === history.length - 1 && m.direction === 'in';
-        let imageUrl = null;
-        if (m.mediaPath) {
-            const filename = path.basename(m.mediaPath);
-            imageUrl = `${PUBLIC_URL}/api/media/${tenantId}/${filename}`;
-        }
-        return renderBubble(m, isNewMsg, imageUrl);
-    }).join('');
+    const bubblesHtml = history.map((m, i) =>
+        renderBubble(m, i === history.length - 1 && m.direction === 'in', tenantId)
+    ).join('');
 
     const html = `
 <!DOCTYPE html>
@@ -166,6 +189,5 @@ export const sendEmailToTenant = async (tenant, tenantId, fromPhone, senderName,
         messageId,
         inReplyTo: threadId,
         references: threadId,
-        attachments: attachments.map(a => ({ filename: a.filename, content: a.content })),
     });
 };

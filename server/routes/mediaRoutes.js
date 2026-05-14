@@ -24,7 +24,20 @@ r.get('/:tenantId/:filename', (req, res) => {
                : ext === '.png'  ? 'image/png'
                : ext === '.webp' ? 'image/webp'
                : ext === '.gif'  ? 'image/gif'
+               : ext === '.mp4'  ? 'video/mp4'
+               : ext === '.webm' ? 'video/webm'
+               : ext === '.ogg'  ? 'audio/ogg'
+               : ext === '.mp3'  ? 'audio/mpeg'
+               : ext === '.m4a'  ? 'audio/mp4'
+               : ext === '.pdf'  ? 'application/pdf'
+               : ext === '.docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+               : ext === '.doc'  ? 'application/msword'
+               : ext === '.xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+               : ext === '.xls'  ? 'application/vnd.ms-excel'
                : 'application/octet-stream';
+
+    const isInline = mime.startsWith('image/') || mime.startsWith('video/') || mime === 'application/pdf';
+    res.setHeader('Content-Disposition', isInline ? 'inline' : `attachment; filename="${filename}"`);
 
     res.setHeader('Content-Type', mime);
     res.setHeader('Cache-Control', 'public, max-age=86400');
