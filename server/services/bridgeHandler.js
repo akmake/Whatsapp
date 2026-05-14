@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { randomBytes } from 'crypto';
 import { fileURLToPath } from 'url';
 import Tenant from '../models/Tenant.js';
 import Message from '../models/Message.js';
@@ -24,19 +25,17 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
 
     let attachments = [];
     let extraText = '';
-    let inlineImage = null; // { buffer, filename } for CID
-    let mediaPath = null;   // saved path for history re-use
+    let mediaPath = null;
 
     if (msgType === 'imageMessage') {
         try {
             const buffer = await downloadMedia(msg, sock);
-            const filename = `image_${Date.now()}.jpg`;
-            // Save to disk for history re-use
+            const token = randomBytes(6).toString('hex');
+            const filename = `img_${Date.now()}_${token}.jpg`;
             const dir = path.join(MEDIA_DIR, tenantId);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             mediaPath = path.join(dir, filename);
             fs.writeFileSync(mediaPath, buffer);
-            inlineImage = { buffer, filename };
             if (!text) extraText = '📷 תמונה';
         } catch (err) {
             console.error(`[${tenantId}] שגיאת הורדת תמונה:`, err.message);
@@ -75,7 +74,6 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
             const sizeMB = (buffer.length / 1024 / 1024).toFixed(1);
             attachments.push({ filename, content: buffer });
             extraText = `📄 ${filename}||${sizeMB}MB`;
-            console.log(`[${tenantId}] מסמך: ${filename} (${buffer.length} bytes)`);
         } catch (err) {
             console.error(`[${tenantId}] שגיאת הורדת מסמך:`, err.message);
             extraText = '📄 קובץ||';
@@ -99,15 +97,15 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     }
 
     const finalText = [text, extraText].filter(Boolean).join('\n');
-    if (!finalText && attachments.length === 0 && !inlineImage) return;
+    if (!finalText && attachments.length === 0 && !mediaPath) return;
 
-    const savedMsg = await Message.create({
+    await Message.create({
         tenantId, phone: fromPhone, senderName, direction: 'in',
         text: finalText || '📷 תמונה',
         mediaPath,
     });
 
-    await sendEmailToTenant(tenant, fromPhone, senderName, finalText, attachments, inlineImage);
+    await sendEmailToTenant(tenant, tenantId, fromPhone, senderName, finalText, attachments);
     recordWaToEmail(tenantId);
     broadcast('message');
     console.log(`[${tenantId}] הודעה מ-${fromPhone} הועברה למייל`);

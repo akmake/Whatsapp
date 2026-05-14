@@ -1,8 +1,9 @@
-import fs from 'fs';
 import path from 'path';
 import nodemailer from 'nodemailer';
 import Message from '../models/Message.js';
 import { decrypt } from '../utils/crypto.js';
+
+const PUBLIC_URL = process.env.PUBLIC_URL || 'http://localhost:5002';
 
 // ─── SMTP transporter cache ─────────────────────────────────────
 
@@ -52,22 +53,22 @@ export const cleanEmailBody = (text) => {
 const escapeHtml = (s) =>
     (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 
-const renderBubble = (msg, isNew = false, imageCid = null) => {
+const renderBubble = (msg, isNew = false, imageUrl = null) => {
     const isIn = msg.direction === 'in';
     const time = new Date(msg.createdAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-    const bubbleBg   = isIn ? '#dcf8c6' : '#ffffff';
-    const borderRad  = isIn ? '8px 0px 8px 8px' : '0px 8px 8px 8px';
-    const align      = isIn ? 'right' : 'left';
-    const tdEmpty    = isIn ? '<td width="15%"></td>' : '';
-    const tdEmptyEnd = !isIn ? '<td width="15%"></td>' : '';
-    const checks     = isIn ? '' : '<span style="font-size:12px;color:#53bdeb;margin-right:3px;">✓✓</span>';
+    const bubbleBg  = isIn ? '#dcf8c6' : '#ffffff';
+    const borderRad = isIn ? '8px 0px 8px 8px' : '0px 8px 8px 8px';
+    const align     = isIn ? 'right' : 'left';
+    const tdL       = isIn ? '<td width="15%"></td>' : '';
+    const tdR       = !isIn ? '<td width="15%"></td>' : '';
+    const checks    = isIn ? '' : '<span style="font-size:12px;color:#53bdeb;margin-right:3px;">✓✓</span>';
 
     let contentHtml;
-    if (imageCid) {
+    if (imageUrl) {
         const caption = (msg.text && msg.text !== '📷 תמונה')
             ? `<div style="font-size:13px;color:#111;margin-top:6px;direction:rtl;">${escapeHtml(msg.text)}</div>`
             : '';
-        contentHtml = `<img src="cid:${imageCid}" style="max-width:260px;width:100%;border-radius:6px;display:block;">${caption}`;
+        contentHtml = `<img src="${imageUrl}" style="max-width:260px;width:100%;border-radius:6px;display:block;">${caption}`;
     } else {
         contentHtml = `<div style="font-size:13px;color:#111;line-height:1.5;direction:rtl;">${escapeHtml(msg.text)}</div>`;
     }
@@ -75,7 +76,7 @@ const renderBubble = (msg, isNew = false, imageCid = null) => {
     return `
     <tr><td style="padding:3px 0;">
       <table width="100%" cellpadding="0" cellspacing="0"><tr>
-        ${tdEmpty}
+        ${tdL}
         <td width="85%" align="${align}">
           ${isNew ? '<div style="text-align:center;margin-bottom:6px;"><span style="background:#e1f3fb;color:#075e54;font-size:11px;padding:3px 10px;border-radius:8px;font-weight:bold;">▼ הודעה חדשה</span></div>' : ''}
           <div style="display:inline-block;background:${bubbleBg};border-radius:${borderRad};padding:8px 12px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,0.12);">
@@ -83,14 +84,14 @@ const renderBubble = (msg, isNew = false, imageCid = null) => {
             <div style="text-align:left;margin-top:4px;">${checks}<span style="font-size:10px;color:#999;">${time}</span></div>
           </div>
         </td>
-        ${tdEmptyEnd}
+        ${tdR}
       </tr></table>
     </td></tr>`;
 };
 
 // ─── שליחת מייל ─────────────────────────────────────────────────
 
-export const sendEmailToTenant = async (tenant, fromPhone, senderName, textContent, attachments = [], inlineImageData = null) => {
+export const sendEmailToTenant = async (tenant, tenantId, fromPhone, senderName, textContent, attachments = []) => {
     const transporter = getTransporter(tenant);
 
     const subject   = `WA_MSG: ${fromPhone}`;
@@ -108,28 +109,14 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
         createdAt: { $gte: startOfDay },
     }).sort({ createdAt: 1 }).lean();
 
-    const cidMap = new Map();
-    const extraAttachments = [];
-    for (const m of history) {
-        if (m.mediaPath) {
-            try {
-                const buf = fs.readFileSync(m.mediaPath);
-                const cid = `img-${m._id}@bridge`;
-                cidMap.set(m._id.toString(), cid);
-                extraAttachments.push({ filename: path.basename(m.mediaPath), content: buf, cid });
-            } catch (e) { /* file missing — skip */ }
-        }
-    }
-    const newMsgId = history.length ? history[history.length - 1]._id.toString() : null;
-    if (inlineImageData && newMsgId && !cidMap.has(newMsgId)) {
-        const cid = `img-${Date.now()}@bridge`;
-        cidMap.set(newMsgId, cid);
-        extraAttachments.push({ filename: inlineImageData.filename, content: inlineImageData.buffer, cid });
-    }
-
     const bubblesHtml = history.map((m, i) => {
         const isNewMsg = i === history.length - 1 && m.direction === 'in';
-        return renderBubble(m, isNewMsg, cidMap.get(m._id.toString()) || null);
+        let imageUrl = null;
+        if (m.mediaPath) {
+            const filename = path.basename(m.mediaPath);
+            imageUrl = `${PUBLIC_URL}/api/media/${tenantId}/${filename}`;
+        }
+        return renderBubble(m, isNewMsg, imageUrl);
     }).join('');
 
     const html = `
@@ -179,9 +166,6 @@ export const sendEmailToTenant = async (tenant, fromPhone, senderName, textConte
         messageId,
         inReplyTo: threadId,
         references: threadId,
-        attachments: [
-            ...attachments.map(a => ({ filename: a.filename, content: a.content })),
-            ...extraAttachments,
-        ],
+        attachments: attachments.map(a => ({ filename: a.filename, content: a.content })),
     });
 };

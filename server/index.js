@@ -17,6 +17,7 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import noteRoutes from './routes/noteRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
 import logRoutes from './routes/logRoutes.js';
+import mediaRoutes from './routes/mediaRoutes.js';
 import Tenant from './models/Tenant.js';
 import LogEntry from './models/LogEntry.js';
 import { poolAdd, startConveyor, poolQueueSend } from './services/tenantPool.js';
@@ -98,6 +99,7 @@ app.use('/api/tenants/:id/payments', protect, paymentRoutes);
 app.use('/api/tenants/:id/notes',    protect, noteRoutes);
 app.use('/api/audit',                protect, auditRoutes);
 app.use('/api/logs',                          logRoutes);
+app.use('/api/media',                         mediaRoutes);
 
 app.all('*', (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));

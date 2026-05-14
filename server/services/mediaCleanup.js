@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const MEDIA_DIR  = path.join(path.dirname(fileURLToPath(import.meta.url)), '../media');
-const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const MAX_AGE_MS = 26 * 60 * 60 * 1000; // 26 שעות — שרשור יומי בלבד
 
 const run = () => {
     if (!fs.existsSync(MEDIA_DIR)) return;
