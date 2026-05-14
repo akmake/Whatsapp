@@ -96,15 +96,18 @@ const checkForNewEmails = async (tenantId, tenant, bridge) => {
                             await sendMessage(tenantId, jid, { text: body });
                             await Message.create({ tenantId, phone, senderName: 'אני', direction: 'out', text: body });
                         }
-                        if (parsed.attachments?.length) {
-                            for (const att of parsed.attachments) {
-                                let content = {};
-                                if (att.contentType.startsWith('image/'))      content = { image: att.content, caption: att.filename };
-                                else if (att.contentType.startsWith('video/')) content = { video: att.content, caption: att.filename };
-                                else if (att.contentType.startsWith('audio/')) content = { audio: att.content, mimetype: 'audio/mp4', ptt: true };
-                                else                                           content = { document: att.content, mimetype: att.contentType, fileName: att.filename };
-                                await sendMessage(tenantId, jid, content);
-                            }
+                        // שולחים רק קבצים שהמשתמש צירף בעצמו (contentDisposition=attachment)
+                        // תמונות inline מגיעות מתבנית ה-HTML ומסוננות החוצה
+                        const userAttachments = (parsed.attachments || []).filter(
+                            att => att.contentDisposition === 'attachment'
+                        );
+                        for (const att of userAttachments) {
+                            let content = {};
+                            if (att.contentType.startsWith('image/'))      content = { image: att.content, caption: att.filename };
+                            else if (att.contentType.startsWith('video/')) content = { video: att.content, caption: att.filename };
+                            else if (att.contentType.startsWith('audio/')) content = { audio: att.content, mimetype: 'audio/mp4', ptt: true };
+                            else                                           content = { document: att.content, mimetype: att.contentType, fileName: att.filename };
+                            await sendMessage(tenantId, jid, content);
                         }
                         console.log(`[${tenantId}] ✓ uid=${uid} → ${phone}`);
                         const b = bridges.get(tenantId);
