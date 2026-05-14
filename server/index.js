@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import connectDB from './config/db.js';
 import globalErrorHandler from './middlewares/errorMiddleware.js';
 import { protect } from './middlewares/authMiddleware.js';
@@ -28,7 +29,9 @@ const app = express();
 
 connectDB();
 
+app.set('trust proxy', 1);
 app.use(helmet());
+app.use(cookieParser());
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
@@ -41,7 +44,7 @@ app.use(cors({
     if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error(`CORS: origin ${origin} not allowed`));
   },
-  credentials: false,
+  credentials: true,
 }));
 
 app.use(express.json({ limit: '10kb' }));

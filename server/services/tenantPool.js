@@ -1,4 +1,4 @@
-import { startTenant, sleepTenant } from './whatsappManager.js';
+import { startTenant, sleepTenant, waitForConnected } from './whatsappManager.js';
 import { startBridge, stopBridge } from './emailBridgeManager.js';
 import { handleIncomingWAMessage } from './bridgeHandler.js';
 
@@ -43,8 +43,13 @@ const runCycle = async (tenantId) => {
 
     try {
         await startTenant(tenantId, handleIncomingWAMessage);
-        entry.state = 'active';
-        await flushPending(tenantId);
+        const connected = await waitForConnected(tenantId, 30_000);
+        if (connected) {
+            entry.state = 'active';
+            await flushPending(tenantId);
+        } else {
+            console.warn(`[pool] ${tenantId} לא התחבר תוך 30ש׳ — מדלג`);
+        }
         await wait(SYNC_WINDOW);
     } catch (err) {
         console.error(`[pool] שגיאה ${tenantId}:`, err.message);

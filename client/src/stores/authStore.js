@@ -8,17 +8,11 @@ export const useAuthStore = create((set) => ({
   error: null,
 
   checkAuth: async () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      set({ user: null, isAuthenticated: false, isLoading: false });
-      return;
-    }
     try {
       set({ isLoading: true });
       const { data } = await api.get('/auth/me');
       set({ user: data.data.user, isAuthenticated: true, isLoading: false });
     } catch {
-      localStorage.removeItem('token');
       set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },
@@ -27,7 +21,6 @@ export const useAuthStore = create((set) => ({
     set({ isLoading: true, error: null });
     try {
       const { data } = await api.post('/auth/login', { email, password });
-      localStorage.setItem('token', data.token);
       set({ user: data.data.user, isAuthenticated: true, isLoading: false });
       return true;
     } catch (err) {
@@ -40,10 +33,7 @@ export const useAuthStore = create((set) => ({
   },
 
   logout: async () => {
-    try {
-      await api.post('/auth/logout');
-    } catch {}
-    localStorage.removeItem('token');
+    try { await api.post('/auth/logout'); } catch {}
     set({ user: null, isAuthenticated: false });
   },
 }));

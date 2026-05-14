@@ -305,6 +305,21 @@ export const startTenant = async (tenantId, onMessage) => {
     sock.ev.on('contacts.update',       () => touch(inst));
 };
 
+export const waitForConnected = (tenantId, timeoutMs = 30_000) =>
+    new Promise((resolve) => {
+        if (isConnected(tenantId)) return resolve(true);
+        const deadline = Date.now() + timeoutMs;
+        const poll = setInterval(() => {
+            if (isConnected(tenantId)) {
+                clearInterval(poll);
+                resolve(true);
+            } else if (!instances.has(tenantId) || Date.now() >= deadline) {
+                clearInterval(poll);
+                resolve(false);
+            }
+        }, 500);
+    });
+
 export const stopTenant = (tenantId) => {
     const inst = instances.get(tenantId);
     if (!inst) return;

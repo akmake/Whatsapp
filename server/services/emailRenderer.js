@@ -2,6 +2,32 @@ import fs from 'fs';
 import path from 'path';
 import nodemailer from 'nodemailer';
 import Message from '../models/Message.js';
+import { decrypt } from '../utils/crypto.js';
+
+// ─── SMTP transporter cache ─────────────────────────────────────
+
+const transporterCache = new Map();
+
+export const invalidateTransporter = (tenantId) => {
+    const t = transporterCache.get(tenantId);
+    if (t) { try { t.close(); } catch (e) {} }
+    transporterCache.delete(tenantId);
+};
+
+const getTransporter = (tenant) => {
+    const id = tenant._id.toString();
+    if (!transporterCache.has(id)) {
+        transporterCache.set(id, nodemailer.createTransport({
+            host: 'smtp.gmail.com',
+            port: 587,
+            secure: false,
+            auth: { user: tenant.bridgeEmail, pass: decrypt(tenant.bridgeEmailPassword) },
+            pool: true,
+            maxConnections: 3,
+        }));
+    }
+    return transporterCache.get(id);
+};
 
 // ─── ניקוי גוף מייל — חיתוך ציטוטים וחתימות ───────────────────
 
@@ -65,12 +91,7 @@ const renderBubble = (msg, isNew = false, imageCid = null) => {
 // ─── שליחת מייל ─────────────────────────────────────────────────
 
 export const sendEmailToTenant = async (tenant, fromPhone, senderName, textContent, attachments = [], inlineImageData = null) => {
-    const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false,
-        auth: { user: tenant.bridgeEmail, pass: tenant.bridgeEmailPassword },
-    });
+    const transporter = getTransporter(tenant);
 
     const subject   = `WA_MSG: ${fromPhone}`;
     const threadId  = `<wa-thread-${tenant._id}-${fromPhone}@bridge>`;

@@ -13,6 +13,7 @@ export default function AdminPage() {
     const [showAdd, setShowAdd]       = useState(false);
     const [editTenant, setEditTenant] = useState(null);
     const [qrModal, setQrModal]       = useState(null);
+    const [qrLoading, setQrLoading]   = useState(false);
     const [compose, setCompose]       = useState(null);
 
     const fetchTenants = useCallback(async () => {
@@ -34,10 +35,15 @@ export default function AdminPage() {
     };
 
     const openQR = async (t) => {
+        setQrLoading(true);
         try {
             const res = await api.get(`/tenants/${t._id}/qr`);
             setQrModal({ id: t._id, qr: res.data.qr, name: t.name });
-        } catch { alert('QR לא זמין כרגע'); }
+        } catch (e) {
+            alert(e.response?.data?.error || 'QR לא זמין כרגע');
+        } finally {
+            setQrLoading(false);
+        }
     };
 
     const selected = tenants.find(t => t._id === selectedId);
@@ -57,6 +63,7 @@ export default function AdminPage() {
                         key={selected._id}
                         tenant={selected}
                         onQR={() => openQR(selected)}
+                        qrLoading={qrLoading}
                         onReconnect={() => api.post(`/tenants/${selected._id}/reconnect`).then(fetchTenants)}
                         onDelete={() => handleDelete(selected._id, selected.name)}
                         onEdit={() => setEditTenant(selected)}

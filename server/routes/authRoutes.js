@@ -20,6 +20,13 @@ const signToken = (id) =>
     expiresIn: process.env.JWT_EXPIRES_IN || '90d',
   });
 
+const COOKIE_OPTS = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 90 * 24 * 60 * 60 * 1000,
+};
+
 router.post('/login', loginLimiter, async (req, res, next) => {
   const { email, password } = req.body;
   if (!email || !password)
@@ -31,9 +38,9 @@ router.post('/login', loginLimiter, async (req, res, next) => {
 
   const token = signToken(user._id);
 
+  res.cookie('token', token, COOKIE_OPTS);
   res.json({
     status: 'success',
-    token,
     data: { user: { _id: user._id, email: user.email, role: user.role } },
   });
 });
@@ -46,6 +53,7 @@ router.get('/me', protect, (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
+  res.clearCookie('token', COOKIE_OPTS);
   res.json({ status: 'success' });
 });
 

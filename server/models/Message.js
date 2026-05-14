@@ -10,4 +10,6 @@ const messageSchema = new mongoose.Schema({
     createdAt:  { type: Date, default: Date.now, index: true },
 });
 
+messageSchema.index({ tenantId: 1, phone: 1, createdAt: 1 });
+
 export default mongoose.model('Message', messageSchema);

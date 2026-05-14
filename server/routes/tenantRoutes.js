@@ -3,6 +3,8 @@ import Tenant from '../models/Tenant.js';
 import { getQR, getAllStatuses, isConnected, sendMessage } from '../services/whatsappManager.js';
 import { startBridge, stopBridge, getBridgeStats, testImapConnection } from '../services/emailBridgeManager.js';
 import { poolAdd, poolRemove, poolUpdateTenant, poolForceWake, getPoolStatus } from '../services/tenantPool.js';
+import { encrypt, decrypt } from '../utils/crypto.js';
+import { invalidateTransporter } from '../services/emailRenderer.js';
 
 const router = express.Router();
 
@@ -61,16 +63,19 @@ router.put('/:id/email-config', async (req, res) => {
         return res.status(400).json({ error: 'כתובות המייל הן חובה' });
 
     const update = { bridgeEmail, destinationEmail };
-    if (bridgeEmailPassword) update.bridgeEmailPassword = bridgeEmailPassword;
+    if (bridgeEmailPassword) update.bridgeEmailPassword = encrypt(bridgeEmailPassword);
 
     const tenant = await Tenant.findByIdAndUpdate(req.params.id, update, { new: true });
     if (!tenant) return res.status(404).json({ error: 'לקוח לא נמצא' });
 
     const tenantId = tenant._id.toString();
     poolUpdateTenant(tenantId, tenant);
+    invalidateTransporter(tenantId);
 
+    // Use plaintext password from request body (before encryption) for testing
+    const plaintextPassword = bridgeEmailPassword || decrypt(tenant.bridgeEmailPassword);
     stopBridge(tenantId);
-    const test = await testImapConnection(tenant.bridgeEmail, tenant.bridgeEmailPassword);
+    const test = await testImapConnection(tenant.bridgeEmail, plaintextPassword);
     if (test.ok) await startBridge(tenantId, tenant);
 
     res.json({
@@ -95,13 +100,17 @@ router.post('/:id/send', async (req, res) => {
     res.json({ ok: true });
 });
 
-// QR לסריקה — מעיר את הלקוח אם ישן
-router.get('/:id/qr', (req, res) => {
+// QR לסריקה — מעיר את הלקוח ומחכה עד שה-QR מוכן (long poll עד 30ש׳)
+router.get('/:id/qr', async (req, res) => {
     const tenantId = req.params.id;
     poolForceWake(tenantId);
-    const qr = getQR(tenantId);
-    if (!qr) return res.status(404).json({ error: 'QR לא זמין עדיין — נסה שוב בעוד כמה שניות' });
-    res.json({ qr });
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+        const qr = getQR(tenantId);
+        if (qr) return res.json({ qr });
+        await new Promise(r => setTimeout(r, 500));
+    }
+    res.status(408).json({ error: 'לא התקבל QR תוך 30 שניות — נסה שוב' });
 });
 
 // מחיקת לקוח

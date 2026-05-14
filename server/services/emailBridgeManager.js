@@ -3,6 +3,7 @@ import { simpleParser } from 'mailparser';
 import { isConnected, sendMessage } from './whatsappManager.js';
 import { cleanEmailBody, sendEmailToTenant } from './emailRenderer.js';
 import Message from '../models/Message.js';
+import { decrypt } from '../utils/crypto.js';
 
 export { sendEmailToTenant } from './emailRenderer.js';
 
@@ -136,7 +137,7 @@ export const startBridge = async (tenantId, tenant) => {
         connection = await imap.connect({
             imap: {
                 user: tenant.bridgeEmail,
-                password: tenant.bridgeEmailPassword,
+                password: decrypt(tenant.bridgeEmailPassword),
                 host: 'imap.gmail.com',
                 port: 993,
                 tls: true,

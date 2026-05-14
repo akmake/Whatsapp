@@ -5,9 +5,11 @@ import AppError from '../utils/AppError.js';
 export const protect = async (req, res, next) => {
   let token;
 
-  const auth = req.headers.authorization;
-  if (auth && auth.startsWith('Bearer ')) {
-    token = auth.split(' ')[1];
+  if (req.cookies?.token) {
+    token = req.cookies.token;
+  } else {
+    const auth = req.headers.authorization;
+    if (auth && auth.startsWith('Bearer ')) token = auth.split(' ')[1];
   }
 
   if (!token) return next(new AppError('לא מחובר. יש להתחבר כדי לגשת.', 401));

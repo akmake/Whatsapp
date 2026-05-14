@@ -15,7 +15,7 @@ function InfoRow({ label, value, mono, warn }) {
     );
 }
 
-export default function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, onEdit, onCompose, onEmailSaved }) {
+export default function TenantPanel({ tenant: t, onQR, qrLoading, onReconnect, onDelete, onEdit, onCompose, onEmailSaved }) {
     const s = WA_STATUS[t.waStatus] || WA_STATUS.disconnected;
     const [ef, setEf] = useState({
         bridgeEmail: t.bridgeEmail || '',
@@ -51,7 +51,11 @@ export default function TenantPanel({ tenant: t, onQR, onReconnect, onDelete, on
                     <WaBtn onClick={onDelete} red>מחק</WaBtn>
                     <WaBtn onClick={onEdit}>ערוך</WaBtn>
                     {t.waStatus === 'connected'    && <WaBtn onClick={onCompose} green>שלח הודעה</WaBtn>}
-                    {t.waStatus === 'waiting_qr'   && <WaBtn onClick={onQR}>הצג QR</WaBtn>}
+                    {t.waStatus === 'waiting_qr'   && (
+                        <WaBtn onClick={onQR} disabled={qrLoading}>
+                            {qrLoading ? '⏳ מחכה ל-QR...' : 'הצג QR'}
+                        </WaBtn>
+                    )}
                     {t.waStatus === 'disconnected' && <WaBtn onClick={onReconnect} yellow>חבר מחדש</WaBtn>}
                 </div>
                 <div className="flex items-center gap-3">
