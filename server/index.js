@@ -11,9 +11,8 @@ import authRoutes from './routes/authRoutes.js';
 import tenantRoutes from './routes/tenantRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import Tenant from './models/Tenant.js';
-import { startTenant } from './services/whatsappManager.js';
-import { startBridge } from './services/emailBridgeManager.js';
-import { handleIncomingWAMessage } from './services/bridgeHandler.js';
+import { poolAdd, startConveyor, poolQueueSend } from './services/tenantPool.js';
+import { registerQueueSend } from './services/emailBridgeManager.js';
 
 dotenv.config();
 
@@ -68,13 +67,13 @@ app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
 
   try {
+    registerQueueSend(poolQueueSend);
     const tenants = await Tenant.find({ active: true });
-    console.log(`מאתחל ${tenants.length} לקוחות...`);
+    console.log(`טוען ${tenants.length} לקוחות לפול...`);
     for (const tenant of tenants) {
-      const id = tenant._id.toString();
-      await startTenant(id, handleIncomingWAMessage);
-      await startBridge(id, tenant);
+      poolAdd(tenant._id.toString(), tenant);
     }
+    startConveyor();
   } catch (err) {
     console.error('שגיאה באתחול לקוחות:', err.message);
   }

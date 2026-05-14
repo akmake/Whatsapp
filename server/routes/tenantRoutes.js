@@ -1,12 +1,12 @@
 import express from 'express';
 import Tenant from '../models/Tenant.js';
-import { startTenant, stopTenant, getStatus, getQR, getAllStatuses, isConnected, sendMessage } from '../services/whatsappManager.js';
+import { getQR, getAllStatuses, isConnected, sendMessage } from '../services/whatsappManager.js';
 import { startBridge, stopBridge, getBridgeStats, testImapConnection } from '../services/emailBridgeManager.js';
-import { handleIncomingWAMessage } from '../services/bridgeHandler.js';
+import { poolAdd, poolRemove, poolUpdateTenant, poolForceWake, getPoolStatus } from '../services/tenantPool.js';
 
 const router = express.Router();
 
-// קבלת כל הלקוחות + סטטוס
+// כל הלקוחות + סטטוס
 router.get('/', async (req, res) => {
     const tenants = await Tenant.find().select('-bridgeEmailPassword');
     const waStatuses = getAllStatuses();
@@ -26,42 +26,40 @@ router.get('/', async (req, res) => {
     res.json(result);
 });
 
-// יצירת לקוח — שם וטלפון בלבד
+// מצב ה-pool
+router.get('/pool-status', (req, res) => {
+    res.json(getPoolStatus());
+});
+
+// יצירת לקוח
 router.post('/', async (req, res) => {
     const { name, phone } = req.body;
     if (!name || !phone) return res.status(400).json({ error: 'שם ומספר טלפון הם חובה' });
 
     const tenant = await Tenant.create({ name, phone });
-    const tenantId = tenant._id.toString();
+    poolAdd(tenant._id.toString(), tenant);
 
-    await startTenant(tenantId, handleIncomingWAMessage);
-
-    res.status(201).json({ _id: tenant._id, name, phone, waStatus: 'connecting' });
+    res.status(201).json({ _id: tenant._id, name, phone, waStatus: 'sleeping' });
 });
 
-// עדכון שם וטלפון של לקוח
+// עדכון שם וטלפון
 router.put('/:id/info', async (req, res) => {
     const { name, phone } = req.body;
     if (!name || !phone) return res.status(400).json({ error: 'שם ומספר טלפון הם חובה' });
 
-    const tenant = await Tenant.findByIdAndUpdate(
-        req.params.id,
-        { name, phone },
-        { new: true }
-    );
+    const tenant = await Tenant.findByIdAndUpdate(req.params.id, { name, phone }, { new: true });
     if (!tenant) return res.status(404).json({ error: 'לקוח לא נמצא' });
 
+    poolUpdateTenant(req.params.id, tenant);
     res.json({ ok: true, name: tenant.name, phone: tenant.phone });
 });
 
-// עדכון הגדרות מייל של לקוח
+// עדכון הגדרות מייל
 router.put('/:id/email-config', async (req, res) => {
     const { bridgeEmail, bridgeEmailPassword, destinationEmail } = req.body;
-    if (!bridgeEmail || !destinationEmail) {
+    if (!bridgeEmail || !destinationEmail)
         return res.status(400).json({ error: 'כתובות המייל הן חובה' });
-    }
 
-    // אם הסיסמא ריקה — שומרים את הקיימת במסד
     const update = { bridgeEmail, destinationEmail };
     if (bridgeEmailPassword) update.bridgeEmailPassword = bridgeEmailPassword;
 
@@ -69,12 +67,11 @@ router.put('/:id/email-config', async (req, res) => {
     if (!tenant) return res.status(404).json({ error: 'לקוח לא נמצא' });
 
     const tenantId = tenant._id.toString();
-    stopBridge(tenantId);
+    poolUpdateTenant(tenantId, tenant);
 
+    stopBridge(tenantId);
     const test = await testImapConnection(tenant.bridgeEmail, tenant.bridgeEmailPassword);
-    if (test.ok) {
-        await startBridge(tenantId, tenant);
-    }
+    if (test.ok) await startBridge(tenantId, tenant);
 
     res.json({
         ok: true,
@@ -85,33 +82,32 @@ router.put('/:id/email-config', async (req, res) => {
     });
 });
 
-// שליחת הודעה חדשה לכל מספר וואצאפ
+// שליחת הודעה ידנית
 router.post('/:id/send', async (req, res) => {
     const { phone, message } = req.body;
     if (!phone || !message) return res.status(400).json({ error: 'טלפון והודעה הם חובה' });
 
     const tenantId = req.params.id;
-    if (!isConnected(tenantId)) return res.status(400).json({ error: 'הוואצאפ של לקוח זה לא מחובר' });
+    if (!isConnected(tenantId)) return res.status(400).json({ error: 'הוואצאפ של לקוח זה לא מחובר כרגע' });
 
     const jid = `${phone.replace(/\D/g, '')}@s.whatsapp.net`;
     await sendMessage(tenantId, jid, { text: message });
-
     res.json({ ok: true });
 });
 
-// קבלת QR לסריקה
+// QR לסריקה — מעיר את הלקוח אם ישן
 router.get('/:id/qr', (req, res) => {
-    const qr = getQR(req.params.id);
-    if (!qr) return res.status(404).json({ error: 'QR לא זמין' });
+    const tenantId = req.params.id;
+    poolForceWake(tenantId);
+    const qr = getQR(tenantId);
+    if (!qr) return res.status(404).json({ error: 'QR לא זמין עדיין — נסה שוב בעוד כמה שניות' });
     res.json({ qr });
 });
 
 // מחיקת לקוח
 router.delete('/:id', async (req, res) => {
-    const tenantId = req.params.id;
-    stopTenant(tenantId);
-    stopBridge(tenantId);
-    await Tenant.findByIdAndDelete(tenantId);
+    poolRemove(req.params.id);
+    await Tenant.findByIdAndDelete(req.params.id);
     res.json({ ok: true });
 });
 
@@ -119,15 +115,7 @@ router.delete('/:id', async (req, res) => {
 router.post('/:id/reconnect', async (req, res) => {
     const tenant = await Tenant.findById(req.params.id);
     if (!tenant) return res.status(404).json({ error: 'לקוח לא נמצא' });
-
-    const tenantId = tenant._id.toString();
-    stopTenant(tenantId);
-    stopBridge(tenantId);
-    await startTenant(tenantId, handleIncomingWAMessage);
-    if (tenant.bridgeEmail && tenant.bridgeEmailPassword && tenant.destinationEmail) {
-        await startBridge(tenantId, tenant);
-    }
-
+    poolForceWake(req.params.id);
     res.json({ ok: true });
 });
 

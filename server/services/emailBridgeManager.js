@@ -6,6 +6,10 @@ import Message from '../models/Message.js';
 
 export { sendEmailToTenant } from './emailRenderer.js';
 
+// callback שמגיע מ-tenantPool — מונע תלות מעגלית
+let _queueSend = null;
+export const registerQueueSend = (fn) => { _queueSend = fn; };
+
 // tenantId => { connection, emailInterval, healthInterval, stats }
 const bridges = new Map();
 
@@ -55,13 +59,12 @@ const checkForNewEmails = async (tenantId, tenant, connection) => {
                     const phone = match[1].trim().replace(/\D/g, '');
                     const jid   = `${phone}@s.whatsapp.net`;
 
-                    try {
+                    const doSend = async () => {
                         const body = cleanEmailBody(parsed.text);
                         if (body) {
                             await sendMessage(tenantId, jid, { text: body });
                             await Message.create({ tenantId, phone, senderName: 'אני', direction: 'out', text: body });
                         }
-
                         if (parsed.attachments?.length) {
                             for (const att of parsed.attachments) {
                                 let content = {};
@@ -72,14 +75,24 @@ const checkForNewEmails = async (tenantId, tenant, connection) => {
                                 await sendMessage(tenantId, jid, content);
                             }
                         }
-
                         console.log(`[${tenantId}] ✓ uid=${uid} → ${phone}`);
                         const bridge = bridges.get(tenantId);
                         if (bridge) { bridge.stats.emailToWa++; bridge.stats.lastEmailAt = new Date().toISOString(); }
-                        shouldMarkSeen = true;
+                    };
 
-                    } catch (waErr) {
-                        console.error(`[${tenantId}] שגיאת וואצאפ:`, waErr.message);
+                    if (isConnected(tenantId)) {
+                        try {
+                            await doSend();
+                            shouldMarkSeen = true;
+                        } catch (waErr) {
+                            console.error(`[${tenantId}] שגיאת וואצאפ:`, waErr.message);
+                            processingEmails.delete(`${tenantId}:${uid}`);
+                        }
+                    } else if (_queueSend) {
+                        // WA ישן — מעביר לקונבייר עם עדיפות
+                        _queueSend(tenantId, doSend);
+                        shouldMarkSeen = true;
+                    } else {
                         processingEmails.delete(`${tenantId}:${uid}`);
                     }
                 } else {

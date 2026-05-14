@@ -25,6 +25,9 @@ const BASE_RECONNECT_DELAY = 3000;
 //               reconnectAttempts, heartbeatInterval, lastEventTimestamp, stats }
 const instances = new Map();
 
+// tenantIds שנרדמו בכוונה — מונע reconnect אוטומטי עד שהדגל יפוג
+const noReconnect = new Set();
+
 const getSessionDir = (tenantId) => path.join(SESSIONS_DIR, tenantId);
 
 // ─── helpers ────────────────────────────────────────────────
@@ -112,6 +115,7 @@ const startHeartbeat = (tenantId, inst) => {
 // ─── reconnect ───────────────────────────────────────────────
 
 const scheduleReconnect = (tenantId, reason) => {
+    if (noReconnect.has(tenantId)) return;
     const inst = instances.get(tenantId);
     if (!inst || inst.reconnectLock) return;
 
@@ -124,7 +128,9 @@ const scheduleReconnect = (tenantId, reason) => {
     const delay = getReconnectDelay(inst.reconnectAttempts);
     console.log(`[${tenantId}] 🔄 reconnect #${inst.reconnectAttempts + 1} בעוד ${Math.round(delay / 1000)}ש׳ (${reason})`);
     inst.stats.reconnectCount++;
-    setTimeout(() => startTenant(tenantId, inst.onMessage), delay);
+    setTimeout(() => {
+        if (!noReconnect.has(tenantId)) startTenant(tenantId, inst.onMessage);
+    }, delay);
 };
 
 const forceReconnect = async (tenantId, reason) => {
@@ -306,4 +312,18 @@ export const stopTenant = (tenantId) => {
     try { inst.sock?.end(); } catch (e) { /* ok */ }
     instances.delete(tenantId);
     console.log(`[${tenantId}] עצור`);
+};
+
+// ניתוק עדין בלי מחיקת session — לשימוש הקונבייר
+export const sleepTenant = (tenantId) => {
+    const inst = instances.get(tenantId);
+    // מסמנים noReconnect כדי שה-close handler לא יפעיל reconnect
+    noReconnect.add(tenantId);
+    setTimeout(() => noReconnect.delete(tenantId), 30_000);
+
+    if (!inst) return;
+    stopHeartbeat(inst);
+    try { inst.sock?.end(); } catch (e) { /* ok */ }
+    instances.delete(tenantId);
+    console.log(`[${tenantId}] נרדם`);
 };
