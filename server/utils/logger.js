@@ -30,6 +30,10 @@ const rotatIfNeeded = () => {
     } catch (e) {}
 };
 
+const LEVELS = { debug: 0, info: 1, warn: 2, error: 3, fatal: 4 };
+// רק warn ומעלה הולכים לדיסק — debug/info רק ב-ring buffer
+const DISK_MIN_LEVEL = 2; // warn
+
 const write = (level, component, message, extra = {}) => {
     const entry = {
         ts:        new Date().toISOString(),
@@ -37,22 +41,26 @@ const write = (level, component, message, extra = {}) => {
         component,
         message,
         pid:       process.pid,
-        mem:       Math.round(process.memoryUsage().rss / 1024 / 1024),
+        mem:       Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
         ...extra,
     };
 
-    // 1. Ring buffer (in-memory) — לשאילתות מהירות
+    // 1. Ring buffer (in-memory) — כל הרמות
     ring.push(entry);
     if (ring.length > RING_SIZE) ring.shift();
 
-    // 2. Disk — שורד קריסות
-    rotatIfNeeded();
-    const line = JSON.stringify(entry) + '\n';
-    _stream.write(line);
-    _fileBytes += line.length;
+    // 2. Disk — רק warn/error/fatal (שורד קריסות, לא מוצף ב-info)
+    if ((LEVELS[level] ?? 0) >= DISK_MIN_LEVEL) {
+        rotatIfNeeded();
+        const line = JSON.stringify(entry) + '\n';
+        _stream.write(line);
+        _fileBytes += line.length;
+    }
 
-    // 3. MongoDB — async, best-effort
-    if (_mongoSink) _mongoSink(entry).catch(() => {});
+    // 3. MongoDB — async, best-effort, רק warn ומעלה
+    if (_mongoSink && (LEVELS[level] ?? 0) >= DISK_MIN_LEVEL) {
+        _mongoSink(entry).catch(() => {});
+    }
 };
 
 export const logger = {

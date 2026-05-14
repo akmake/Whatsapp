@@ -22,6 +22,7 @@ import LogEntry from './models/LogEntry.js';
 import { poolAdd, startConveyor, poolQueueSend } from './services/tenantPool.js';
 import { registerQueueSend } from './services/emailBridgeManager.js';
 import { startMediaCleanup } from './services/mediaCleanup.js';
+import { startHealthMonitor, getHealthSnapshot } from './services/healthMonitor.js';
 
 dotenv.config();
 
@@ -84,14 +85,6 @@ const globalLimiter = rateLimit({
 });
 app.use('/api', globalLimiter);
 
-// ─── HTTP logging middleware ──────────────────────────────────────
-
-app.use((req, _res, next) => {
-    if (req.path.startsWith('/api/logs') || req.path === '/api/events') return next();
-    logger.debug('http', `${req.method} ${req.path}`);
-    next();
-});
-
 app.get('/', (req, res) => res.json({ status: 'ok' }));
 
 // public
@@ -120,6 +113,7 @@ app.listen(PORT, async () => {
   try {
     registerQueueSend(poolQueueSend);
     startMediaCleanup();
+    startHealthMonitor();
     const tenants = await Tenant.find({ active: true });
     logger.info('server', `loading ${tenants.length} tenants into pool`);
     console.log(`טוען ${tenants.length} לקוחות לפול...`);

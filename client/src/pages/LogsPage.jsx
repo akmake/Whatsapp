@@ -3,190 +3,257 @@ import api from '@/services/api';
 import { useSSE } from '@/hooks/useSSE';
 
 const LEVEL_STYLE = {
-    debug: { bg: 'bg-gray-50',   text: 'text-gray-400',   badge: 'bg-gray-100 text-gray-500',   dot: 'bg-gray-300' },
-    info:  { bg: 'bg-white',     text: 'text-[#111b21]',  badge: 'bg-blue-100 text-blue-600',   dot: 'bg-blue-400' },
-    warn:  { bg: 'bg-yellow-50', text: 'text-yellow-800', badge: 'bg-yellow-100 text-yellow-700', dot: 'bg-yellow-400' },
-    error: { bg: 'bg-red-50',    text: 'text-red-800',    badge: 'bg-red-100 text-red-600',     dot: 'bg-red-500' },
-    fatal: { bg: 'bg-red-100',   text: 'text-red-900',    badge: 'bg-red-600 text-white',       dot: 'bg-red-700' },
+    warn:  { bg: 'bg-yellow-50', text: 'text-yellow-800', badge: 'bg-yellow-100 text-yellow-700', bar: 'bg-yellow-400' },
+    error: { bg: 'bg-red-50',    text: 'text-red-800',    badge: 'bg-red-100 text-red-600',       bar: 'bg-red-500'    },
+    fatal: { bg: 'bg-red-100',   text: 'text-red-900',    badge: 'bg-red-600 text-white',         bar: 'bg-red-700'    },
 };
 
-const COMPONENT_LABELS = { imap: 'IMAP', wa: 'WhatsApp', pool: 'Pool', server: 'Server', http: 'HTTP', crash: 'CRASH', media: 'Media' };
+const COMP_LABELS = { imap: 'IMAP', wa: 'WhatsApp', pool: 'Pool', server: 'Server', crash: 'CRASH', health: 'Health', media: 'Media' };
 
 function fmtTime(ts) {
     return new Date(ts).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 function fmtDate(ts) {
-    return new Date(ts).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
+    const d = new Date(ts);
+    return `${d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' })} ${fmtTime(ts)}`;
+}
+function ago(ts) {
+    const s = Math.round((Date.now() - new Date(ts)) / 1000);
+    if (s < 60)  return `${s}ש׳`;
+    if (s < 3600) return `${Math.round(s / 60)}ד׳`;
+    return `${Math.round(s / 3600)}ש׳`;
 }
 
-export default function LogsPage() {
-    const [entries,   setEntries]   = useState([]);
-    const [stats,     setStats]     = useState(null);
-    const [crash,     setCrash]     = useState(null);
-    const [loading,   setLoading]   = useState(true);
-    const [autoScroll,setAutoScroll] = useState(true);
-    const [filterLvl, setFilterLvl] = useState('');
-    const [filterComp,setFilterComp] = useState('');
-    const [paused,    setPaused]    = useState(false);
-    const bottomRef = useRef(null);
+// ─── Memory bar ───────────────────────────────────────────────────
+function MemBar({ used, total, label, warn = 600, error = 900 }) {
+    const pct   = total ? Math.round((used / total) * 100) : 0;
+    const color = used > error ? 'bg-red-500' : used > warn ? 'bg-yellow-400' : 'bg-green-400';
+    return (
+        <div>
+            <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-[#8696a0]">{label}</span>
+                <span className="font-medium text-[#111b21]">{used}MB {total ? `/ ${total}MB` : ''}</span>
+            </div>
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+            </div>
+        </div>
+    );
+}
 
-    const fetchLogs = useCallback(async () => {
+// ─── Lag indicator ────────────────────────────────────────────────
+function LagDot({ lag }) {
+    if (!lag) return <span className="text-xs text-[#8696a0]">—</span>;
+    const color = lag > 2000 ? 'text-red-600 font-bold' : lag > 500 ? 'text-yellow-600 font-bold' : 'text-green-600';
+    return <span className={`text-xs font-mono ${color}`}>{lag}ms</span>;
+}
+
+// ─── Mini sparkline (last N memory samples) ───────────────────────
+function Sparkline({ samples = [], h = 32, w = 120 }) {
+    if (samples.length < 2) return null;
+    const max = Math.max(...samples, 100);
+    const pts = samples.map((v, i) => {
+        const x = (i / (samples.length - 1)) * w;
+        const y = h - (v / max) * h;
+        return `${x},${y}`;
+    }).join(' ');
+    const last = samples[samples.length - 1];
+    const color = last > 900 ? '#ef4444' : last > 600 ? '#eab308' : '#22c55e';
+    return (
+        <svg width={w} height={h} className="flex-shrink-0">
+            <polyline fill="none" stroke={color} strokeWidth="1.5" points={pts} />
+        </svg>
+    );
+}
+
+// ─── Main page ────────────────────────────────────────────────────
+export default function LogsPage() {
+    const [entries, setEntries] = useState([]);
+    const [stats,   setStats]   = useState(null);
+    const [crash,   setCrash]   = useState(null);
+    const [paused,  setPaused]  = useState(false);
+    const [filter,  setFilter]  = useState('');  // '' | 'warn' | 'error' | 'fatal' | 'health'
+
+    const fetchData = useCallback(async () => {
         if (paused) return;
         try {
-            const params = new URLSearchParams({ limit: 500 });
-            if (filterLvl)  params.set('level', filterLvl);
-            if (filterComp) params.set('component', filterComp);
+            const params = new URLSearchParams({ limit: 300 });
+            if (filter) params.set(filter === 'health' ? 'component' : 'level', filter === 'health' ? 'health' : filter);
             const [logsRes, statsRes] = await Promise.all([
                 api.get(`/logs?${params}`),
                 api.get('/logs/stats'),
             ]);
-            setEntries(logsRes.data);
+            // רק warn/error/fatal מהרינג — לא info/debug
+            const all = (logsRes.data || []).filter(e => ['warn','error','fatal'].includes(e.level) || e.component === 'health');
+            setEntries(all);
             setStats(statsRes.data);
-            setLoading(false);
-        } catch (e) { setLoading(false); }
-    }, [filterLvl, filterComp, paused]);
-
-    const fetchCrash = useCallback(async () => {
-        try {
-            const res = await api.get('/logs/crash');
-            if (res.data.found) setCrash(res.data);
         } catch (e) {}
-    }, []);
+    }, [filter, paused]);
 
-    useEffect(() => { fetchLogs(); fetchCrash(); }, [fetchLogs]);
-    useSSE(fetchLogs, 500);
+    useEffect(() => { fetchData(); }, [fetchData]);
+    useSSE(fetchData, 2000);
 
     useEffect(() => {
-        if (autoScroll && bottomRef.current) {
-            bottomRef.current.scrollIntoView({ behavior: 'smooth' });
-        }
-    }, [entries, autoScroll]);
+        api.get('/logs/crash').then(r => { if (r.data?.found) setCrash(r.data); }).catch(() => {});
+    }, []);
 
-    const components = [...new Set(entries.map(e => e.component))].filter(Boolean);
+    const health = stats?.health;
+    const lastLag = health?.memSamples?.length
+        ? null // lag comes only in log entries
+        : null;
+    const lastLagEntry = entries.find(e => e.component === 'health' && e.message?.includes('lag'));
+    const currentLag   = lastLagEntry ? parseInt(lastLagEntry.message.match(/(\d+)ms/)?.[1]) : 0;
 
     return (
         <div className="min-h-screen bg-[#eae6df] flex flex-col" dir="rtl">
 
             {/* Header */}
             <div className="bg-[#075E54] text-white px-5 py-3 flex items-center justify-between flex-shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="text-lg font-bold">📋 לוג מערכת</div>
-                    {stats && (
-                        <div className="text-xs text-white/70">
-                            PID {stats.process.pid} · {stats.process.uptime}ש׳ פעיל · {stats.process.rss}MB RAM
-                        </div>
-                    )}
-                </div>
+                <span className="text-base font-bold">📊 ניטור מערכת</span>
                 <div className="flex items-center gap-2">
-                    <a href="/admin" className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition">
-                        ← אדמין
-                    </a>
-                    <a href="/api/logs/file" className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition">
-                        ⬇ הורד לוג
-                    </a>
+                    <a href="/admin" className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg">← אדמין</a>
+                    <a href="/api/logs/file" className="text-xs bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg">⬇ הורד לוג</a>
                 </div>
             </div>
 
-            {/* Stats bar */}
-            {stats && (
-                <div className="bg-white border-b border-[#d1d7db] px-5 py-2 flex items-center gap-4 flex-shrink-0 flex-wrap">
-                    {Object.entries(stats.counts).map(([lvl, cnt]) => {
-                        const s = LEVEL_STYLE[lvl] || {};
-                        return cnt > 0 ? (
-                            <button key={lvl} onClick={() => setFilterLvl(filterLvl === lvl ? '' : lvl)}
-                                className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded-lg border transition
-                                    ${filterLvl === lvl ? s.badge + ' border-current' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-                                {lvl} {cnt}
-                            </button>
-                        ) : null;
-                    })}
-                    <div className="flex-1" />
-                    <label className="flex items-center gap-1.5 text-xs text-[#8696a0] cursor-pointer">
-                        <input type="checkbox" checked={autoScroll} onChange={e => setAutoScroll(e.target.checked)} className="rounded" />
-                        גלול אוטומטי
-                    </label>
-                    <button onClick={() => setPaused(p => !p)}
-                        className={`text-xs px-3 py-1 rounded-lg border transition font-medium
-                            ${paused ? 'bg-yellow-100 text-yellow-700 border-yellow-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                        {paused ? '▶ המשך' : '⏸ עצור'}
-                    </button>
-                    {components.length > 0 && (
-                        <select value={filterComp} onChange={e => setFilterComp(e.target.value)}
-                            className="text-xs border border-gray-200 rounded-lg px-2 py-1 text-[#111b21]">
-                            <option value="">כל הרכיבים</option>
-                            {components.map(c => <option key={c} value={c}>{COMPONENT_LABELS[c] || c}</option>)}
-                        </select>
-                    )}
-                </div>
-            )}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
-            {/* Crash banner */}
-            {crash && (
-                <div className="bg-red-600 text-white px-5 py-3 flex-shrink-0">
-                    <p className="text-sm font-bold mb-1">⚠️ קריסה אחרונה זוהתה — PID {crash.crash.pid}</p>
-                    <p className="text-xs text-red-100">{crash.crash.message} · {new Date(crash.crash.ts).toLocaleString('he-IL')}</p>
-                    <details className="mt-2">
-                        <summary className="text-xs text-red-200 cursor-pointer">הצג הקשר ({crash.context.length} רשומות)</summary>
-                        <div className="mt-2 bg-red-900/50 rounded-lg p-3 space-y-1 max-h-48 overflow-y-auto text-left">
-                            {crash.context.map((e, i) => (
-                                <div key={i} className="text-xs font-mono text-red-100">
-                                    [{fmtTime(e.ts)}] [{e.level.toUpperCase()}] [{e.component}] {e.message}
-                                </div>
-                            ))}
-                        </div>
-                    </details>
-                </div>
-            )}
-
-            {/* Log entries */}
-            <div className="flex-1 overflow-y-auto">
-                {loading ? (
-                    <div className="text-center py-16 text-[#8696a0] text-sm">טוען לוגים...</div>
-                ) : entries.length === 0 ? (
-                    <div className="text-center py-16">
-                        <p className="text-3xl mb-2">📋</p>
-                        <p className="text-sm text-[#8696a0]">אין רשומות לוג</p>
-                    </div>
-                ) : (
-                    <div className="font-mono text-xs">
-                        {[...entries].reverse().map((e, i) => {
-                            const s = LEVEL_STYLE[e.level] || LEVEL_STYLE.info;
-                            return (
-                                <div key={i} className={`flex items-start gap-3 px-4 py-1.5 border-b border-black/5 hover:brightness-95 transition-all ${s.bg}`}>
-                                    <span className="text-[#8696a0] flex-shrink-0 w-24 text-right">
-                                        {fmtDate(e.ts)} {fmtTime(e.ts)}
-                                    </span>
-                                    <span className={`flex-shrink-0 w-12 text-center font-bold uppercase text-[10px] ${s.text}`}>
-                                        {e.level}
-                                    </span>
-                                    <span className="flex-shrink-0 w-16 text-[#8696a0]">
-                                        {COMPONENT_LABELS[e.component] || e.component || '—'}
-                                    </span>
-                                    <span className={`flex-1 ${s.text} leading-relaxed`}>
-                                        {e.tenantId && <span className="text-purple-500 mr-1">[{e.tenantId.slice(-6)}]</span>}
-                                        {e.message}
-                                        {e.stack && (
-                                            <details className="mt-1">
-                                                <summary className="text-red-400 cursor-pointer">stack trace</summary>
-                                                <pre className="text-[10px] text-red-500 whitespace-pre-wrap mt-1">{e.stack}</pre>
-                                            </details>
-                                        )}
-                                    </span>
-                                    <span className="flex-shrink-0 text-[#8696a0] text-[10px]">{e.mem}MB</span>
-                                </div>
-                            );
-                        })}
-                        <div ref={bottomRef} />
+                {/* Crash banner */}
+                {crash && (
+                    <div className="bg-red-600 text-white rounded-xl p-4">
+                        <p className="text-sm font-bold mb-1">⚠️ קריסה זוהתה ב-PID {crash.crash.pid}</p>
+                        <p className="text-xs text-red-100">{crash.crash.message} · {fmtDate(crash.crash.ts)}</p>
+                        <details className="mt-2">
+                            <summary className="text-xs text-red-200 cursor-pointer">הצג הקשר ({crash.context.length} רשומות לפני הקריסה)</summary>
+                            <div className="mt-2 bg-red-900/40 rounded-lg p-3 space-y-0.5 max-h-40 overflow-y-auto text-left font-mono">
+                                {crash.context.map((e, i) => (
+                                    <div key={i} className="text-[11px] text-red-100">
+                                        [{fmtTime(e.ts)}] [{e.level?.toUpperCase()}] [{e.component}] {e.message}
+                                    </div>
+                                ))}
+                            </div>
+                        </details>
                     </div>
                 )}
+
+                {/* Health cards */}
+                {health && (
+                    <div className="grid grid-cols-2 gap-3">
+                        {/* Memory */}
+                        <div className="bg-white rounded-xl shadow-sm p-4 col-span-2">
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-semibold text-[#8696a0]">זיכרון</span>
+                                <div className="flex items-center gap-3">
+                                    <Sparkline samples={health.memSamples} />
+                                    <span className="text-xs text-[#8696a0]">דקה אחרונה</span>
+                                </div>
+                            </div>
+                            <div className="space-y-3">
+                                <MemBar label="Heap (JS)" used={health.heapUsed} total={health.heapTotal} warn={600} error={900} />
+                                <MemBar label="RSS (תהליך)"  used={health.rss} total={null} warn={800} error={1200} />
+                            </div>
+                        </div>
+
+                        {/* Uptime */}
+                        <div className="bg-white rounded-xl shadow-sm p-4">
+                            <p className="text-xs text-[#8696a0] mb-1">פעיל מזה</p>
+                            <p className="text-2xl font-bold text-[#111b21]">
+                                {health.uptime < 3600
+                                    ? `${Math.round(health.uptime / 60)}ד׳`
+                                    : `${Math.round(health.uptime / 3600)}ש׳`}
+                            </p>
+                            <p className="text-xs text-[#8696a0] mt-0.5">PID {health.pid}</p>
+                        </div>
+
+                        {/* Error counts */}
+                        <div className="bg-white rounded-xl shadow-sm p-4">
+                            <p className="text-xs text-[#8696a0] mb-2">שגיאות (ריצה זו)</p>
+                            <div className="space-y-1">
+                                {[['warn','⚠️','text-yellow-600'], ['error','🔴','text-red-600'], ['fatal','💀','text-red-900']].map(([l, icon, cls]) => (
+                                    <div key={l} className="flex items-center justify-between text-xs">
+                                        <span className={`font-medium ${cls}`}>{icon} {l}</span>
+                                        <span className="font-bold text-[#111b21]">{stats?.counts?.[l] ?? 0}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Last error */}
+                {stats?.lastError && (
+                    <div className="bg-white rounded-xl shadow-sm p-4 border-r-4 border-red-500">
+                        <p className="text-xs text-[#8696a0] mb-1">שגיאה אחרונה · {ago(stats.lastError.ts)} לפני</p>
+                        <p className="text-sm font-medium text-[#111b21]">[{COMP_LABELS[stats.lastError.component] || stats.lastError.component}] {stats.lastError.message}</p>
+                        <p className="text-xs text-[#8696a0] mt-0.5">{fmtDate(stats.lastError.ts)} · {stats.lastError.mem}MB heap</p>
+                    </div>
+                )}
+
+                {/* Filter bar */}
+                <div className="flex items-center gap-2 flex-wrap">
+                    {[['', 'הכל'], ['error', '🔴 שגיאות'], ['warn', '⚠️ אזהרות'], ['fatal', '💀 קריסות'], ['health', '💓 עומס']].map(([val, label]) => (
+                        <button key={val} onClick={() => setFilter(val)}
+                            className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition
+                                ${filter === val ? 'bg-[#075E54] text-white border-[#075E54]' : 'bg-white text-[#8696a0] border-gray-200 hover:border-gray-300'}`}>
+                            {label}
+                        </button>
+                    ))}
+                    <div className="flex-1" />
+                    <button onClick={() => setPaused(p => !p)}
+                        className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition
+                            ${paused ? 'bg-yellow-100 text-yellow-700 border-yellow-200' : 'bg-white text-[#8696a0] border-gray-200'}`}>
+                        {paused ? '▶ המשך' : '⏸ עצור'}
+                    </button>
+                </div>
+
+                {/* Log entries — only warnings/errors */}
+                <div className="space-y-1">
+                    {entries.length === 0 ? (
+                        <div className="text-center py-10 bg-white rounded-xl shadow-sm">
+                            <p className="text-3xl mb-2">✅</p>
+                            <p className="text-sm text-[#8696a0]">אין שגיאות ב-ring buffer הנוכחי</p>
+                        </div>
+                    ) : entries.map((e, i) => {
+                        const s = LEVEL_STYLE[e.level] || LEVEL_STYLE.warn;
+                        return (
+                            <div key={i} className={`rounded-xl shadow-sm p-3 border-r-4 ${s.bg}`}
+                                style={{ borderColor: s.bar?.replace('bg-','') }}>
+                                <div className="flex items-start gap-3">
+                                    <div className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded flex-shrink-0 mt-0.5 ${s.badge}`}>
+                                        {e.level}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <span className="text-xs font-medium text-[#111b21]">
+                                                {COMP_LABELS[e.component] || e.component}
+                                            </span>
+                                            {e.tenantId && <span className="text-[10px] text-purple-500">[{e.tenantId.slice(-6)}]</span>}
+                                            {e.lag     && <span className="text-[10px] font-mono text-red-600">lag: {e.lag}ms</span>}
+                                            {e.heapMB  && <span className="text-[10px] text-gray-400">{e.heapMB}MB</span>}
+                                            {e.growth  && <span className="text-[10px] text-red-500">↑{e.growth}MB</span>}
+                                        </div>
+                                        <p className={`text-sm ${s.text} leading-snug`}>{e.message}</p>
+                                        {e.stack && (
+                                            <details className="mt-1">
+                                                <summary className="text-[10px] text-red-400 cursor-pointer">stack</summary>
+                                                <pre className="text-[9px] text-red-500 whitespace-pre-wrap mt-1 font-mono">{e.stack}</pre>
+                                            </details>
+                                        )}
+                                    </div>
+                                    <span className="text-[10px] text-[#8696a0] flex-shrink-0 text-left">{fmtTime(e.ts)}</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
             </div>
 
-            {/* Live indicator */}
+            {/* Footer */}
             <div className={`flex-shrink-0 px-4 py-2 text-xs flex items-center gap-2 border-t border-[#d1d7db]
                 ${paused ? 'bg-yellow-50 text-yellow-700' : 'bg-white text-[#8696a0]'}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${paused ? 'bg-yellow-400' : 'bg-green-400 animate-pulse'}`} />
-                {paused ? 'עדכון מושהה' : `עדכון בזמן אמת · ${entries.length} רשומות`}
+                {paused ? 'עדכון מושהה' : `${entries.length} אירועים · עדכון בזמן אמת`}
             </div>
         </div>
     );

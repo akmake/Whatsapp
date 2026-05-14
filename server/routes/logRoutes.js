@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import { protect } from '../middlewares/authMiddleware.js';
 import { logger, readPreCrashLog, findLastCrash } from '../utils/logger.js';
+import { getHealthSnapshot } from '../services/healthMonitor.js';
 import LogEntry from '../models/LogEntry.js';
 
 const r = express.Router();
@@ -51,24 +52,16 @@ r.get('/file', protect, (req, res) => {
     res.download(filePath, 'app.log');
 });
 
-// GET /api/logs/stats — סטטיסטיקות מהיר
+// GET /api/logs/stats — סטטיסטיקות + health snapshot
 r.get('/stats', protect, (req, res) => {
     const entries = logger.ring();
-    const counts = { debug: 0, info: 0, warn: 0, error: 0, fatal: 0 };
+    const counts = { warn: 0, error: 0, fatal: 0 };
     entries.forEach(e => { if (counts[e.level] !== undefined) counts[e.level]++; });
-    const last = entries[0] || null;
-    const mem  = process.memoryUsage();
+    const lastError = [...entries].find(e => e.level === 'error' || e.level === 'fatal');
     res.json({
         counts,
-        total:   entries.length,
-        last,
-        process: {
-            pid:     process.pid,
-            uptime:  Math.round(process.uptime()),
-            rss:     Math.round(mem.rss / 1024 / 1024),
-            heap:    Math.round(mem.heapUsed / 1024 / 1024),
-            heapMax: Math.round(mem.heapTotal / 1024 / 1024),
-        },
+        lastError,
+        health: getHealthSnapshot(),
     });
 });
 
