@@ -92,8 +92,12 @@ const stopHeartbeat = (inst) => {
 };
 
 const startHeartbeat = (tenantId, inst) => {
+    // Guard: if the instance was already removed (race with sleepTenant), don't start
+    if (instances.get(tenantId) !== inst) return;
     stopHeartbeat(inst);
     inst.heartbeatInterval = setInterval(async () => {
+        // Guard: stop the interval if this instance is no longer active
+        if (instances.get(tenantId) !== inst) { stopHeartbeat(inst); return; }
         const silentMin = (Date.now() - inst.lastEventTimestamp) / 60000;
         if (silentMin > 10) {
             console.warn(`[${tenantId}] 💀 heartbeat: שתיקה ${Math.round(silentMin)} דקות`);
