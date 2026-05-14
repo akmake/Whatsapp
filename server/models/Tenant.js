@@ -7,6 +7,17 @@ const tenantSchema = new mongoose.Schema({
   bridgeEmailPassword: { type: String, default: '' },
   destinationEmail:    { type: String, default: '' },
   active:              { type: Boolean, default: true },
+
+  // Billing & plan
+  planType:        { type: String, enum: ['trial', 'monthly', 'annual', 'custom'], default: 'trial' },
+  planPrice:       { type: Number, default: 0 },          // ILS per billing cycle
+  billingStatus:   { type: String, enum: ['active', 'overdue', 'trial', 'suspended', 'cancelled'], default: 'trial' },
+  nextBillingDate: { type: Date,   default: null },
+
+  // Contact
+  contractEmail:   { type: String, default: '' },         // business contact email
+  tags:            [{ type: String }],
+  internalNotes:   { type: String, default: '' },         // quick one-liner visible in sidebar
 }, { timestamps: true });
 
 export default mongoose.model('Tenant', tenantSchema);

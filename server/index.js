@@ -12,6 +12,9 @@ import authRoutes from './routes/authRoutes.js';
 import tenantRoutes from './routes/tenantRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import sseRoutes from './routes/sseRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
+import noteRoutes from './routes/noteRoutes.js';
+import auditRoutes from './routes/auditRoutes.js';
 import Tenant from './models/Tenant.js';
 import { poolAdd, startConveyor, poolQueueSend } from './services/tenantPool.js';
 import { registerQueueSend } from './services/emailBridgeManager.js';
@@ -68,7 +71,10 @@ app.use('/api/auth', authRoutes);
 // protected
 app.use('/api/tenants',   protect, tenantRoutes);
 app.use('/api/dashboard', protect, dashboardRoutes);
-app.use('/api/events',    sseRoutes);
+app.use('/api/events',                    sseRoutes);
+app.use('/api/tenants/:id/payments', protect, paymentRoutes);
+app.use('/api/tenants/:id/notes',    protect, noteRoutes);
+app.use('/api/audit',                protect, auditRoutes);
 
 app.all('*', (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
