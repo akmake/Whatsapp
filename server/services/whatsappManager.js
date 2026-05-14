@@ -3,7 +3,6 @@ import makeWASocket, {
     DisconnectReason,
     fetchLatestBaileysVersion,
     makeCacheableSignalKeyStore,
-    downloadMediaMessage,
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
@@ -12,6 +11,7 @@ import NodeCache from 'node-cache';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+export { getMessageText, getMessageType, downloadMedia } from './waMessageUtils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SESSIONS_DIR = path.join(__dirname, '../sessions');
@@ -77,31 +77,6 @@ export const extractPhone = (msg, tenantId) => {
     }
     return jid.replace('@s.whatsapp.net', '').replace(/\D/g, '');
 };
-
-export const getMessageText = (msg) => {
-    const m = msg.message;
-    if (!m) return '';
-    return m.conversation
-        || m.extendedTextMessage?.text
-        || m.imageMessage?.caption
-        || m.videoMessage?.caption
-        || m.documentMessage?.caption
-        || '';
-};
-
-export const getMessageType = (msg) => {
-    const m = msg.message;
-    if (!m) return 'unknown';
-    return Object.keys(m).find(k =>
-        !['messageContextInfo', 'senderKeyDistributionMessage'].includes(k)
-    ) || 'unknown';
-};
-
-export const downloadMedia = async (msg, sock) =>
-    await downloadMediaMessage(msg, 'buffer', {}, {
-        logger: pino({ level: 'silent' }),
-        reuploadRequest: sock,
-    });
 
 // ─── heartbeat ───────────────────────────────────────────────
 

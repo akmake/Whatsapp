@@ -3,7 +3,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import Tenant from '../models/Tenant.js';
 import Message from '../models/Message.js';
-import { extractPhone, getMessageText, getMessageType, downloadMedia } from './whatsappManager.js';
+import { extractPhone } from './whatsappManager.js';
+import { getMessageText, getMessageType, downloadMedia } from './waMessageUtils.js';
 import { sendEmailToTenant, recordWaToEmail } from './emailBridgeManager.js';
 
 const MEDIA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../media');
