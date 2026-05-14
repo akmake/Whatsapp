@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>תצוגת אימייל — בדיקת מדיה</title>
+<style>
+  body { margin: 0; padding: 24px; background: #ccc; font-family: Arial, sans-serif; direction: rtl; }
+  .page-label { text-align: center; font-size: 13px; color: #444; margin-bottom: 16px; font-weight: bold; }
+
+  /* ── Lightbox ── */
+  #lb { display:none; position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:9999; align-items:center; justify-content:center; cursor:zoom-out; }
+  #lb.open { display:flex; }
+  #lb img { max-width:95vw; max-height:95vh; border-radius:8px; box-shadow:0 8px 40px rgba(0,0,0,.6); }
+  #lb-close { position:fixed; top:16px; left:16px; color:#fff; font-size:32px; cursor:pointer; line-height:1; opacity:.8; }
+  #lb-close:hover { opacity:1; }
+</style>
+</head>
+<body>
+
+<!-- Lightbox overlay -->
+<div id="lb" onclick="closeLb()">
+  <span id="lb-close">✕</span>
+  <img id="lb-img" src="" alt="">
+</div>
+
+<div class="page-label">📧 תצוגת אימייל — שרשור מלא עם כל סוגי המדיה</div>
+
+<!-- ══ EMAIL WRAPPER ══════════════════════════════════════════════ -->
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f0f0;padding:16px 0;">
+  <tr><td align="center">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width:540px;">
+
+      <!-- כותרת ירוקה -->
+      <tr><td style="background:#25d366;border-radius:12px 12px 0 0;padding:10px 18px;text-align:center;">
+        <div style="color:#fff;font-size:14px;font-weight:bold;">↩ לחץ Reply וכתוב את תשובתך</div>
+      </td></tr>
+
+      <!-- פרטי שולח -->
+      <tr><td style="background:#075e54;padding:12px 16px;">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td style="width:44px;vertical-align:middle;">
+            <div style="width:40px;height:40px;border-radius:50%;background:#25d366;text-align:center;line-height:40px;font-size:18px;color:#fff;font-weight:bold;">י</div>
+          </td>
+          <td style="padding-right:10px;vertical-align:middle;">
+            <div style="color:#fff;font-size:15px;font-weight:bold;direction:rtl;">יוסף כהן</div>
+            <div style="color:#b2dfdb;font-size:12px;">+972501234567</div>
+          </td>
+          <td align="left" style="vertical-align:middle;">
+            <div style="color:#b2dfdb;font-size:11px;">14/05/2025</div>
+          </td>
+        </tr></table>
+      </td></tr>
+
+      <!-- אזור השיחה -->
+      <tr><td style="background:#e5ddd5;padding:12px 10px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+
+          <!-- 1: טקסט נכנס -->
+          <tr><td style="padding:3px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td width="85%" align="right">
+                <div style="display:inline-block;background:#dcf8c6;border-radius:8px 0 8px 8px;padding:8px 12px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,.12);">
+                  <div style="font-size:13px;color:#111;line-height:1.5;">שלום! אני שולח לך כמה קבצים לבדיקה 👋</div>
+                  <div style="text-align:left;margin-top:4px;"><span style="font-size:10px;color:#999;">09:01</span></div>
+                </div>
+              </td><td width="15%"></td>
+            </tr></table>
+          </td></tr>
+
+          <!-- 2: תמונה — לחיצה פותחת lightbox -->
+          <tr><td style="padding:3px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td width="85%" align="right">
+                <div style="display:inline-block;background:#dcf8c6;border-radius:8px 0 8px 8px;padding:8px 12px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,.12);">
+                  <img src="http://46.224.63.165/api/media/test-preview/img_test_abc123.jpg"
+                       onclick="openLb(this.src)"
+                       style="max-width:260px;width:100%;border-radius:6px;display:block;cursor:zoom-in;">
+                  <div style="text-align:left;margin-top:4px;"><span style="font-size:10px;color:#999;">09:02</span></div>
+                </div>
+              </td><td width="15%"></td>
+            </tr></table>
+          </td></tr>
+
+          <!-- 3: תשובה יוצאת -->
+          <tr><td style="padding:3px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td width="15%"></td>
+              <td width="85%" align="left">
+                <div style="display:inline-block;background:#fff;border-radius:0 8px 8px 8px;padding:8px 12px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,.12);">
+                  <div style="font-size:13px;color:#111;line-height:1.5;">קיבלתי! ממשיך לשלוח 👍</div>
+                  <div style="text-align:left;margin-top:4px;"><span style="font-size:12px;color:#53bdeb;margin-right:3px;">✓✓</span><span style="font-size:10px;color:#999;">09:03</span></div>
+                </div>
+              </td>
+            </tr></table>
+          </td></tr>
+
+          <!-- 4: שמע -->
+          <tr><td style="padding:3px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td width="85%" align="right">
+                <div style="display:inline-block;background:#dcf8c6;border-radius:8px 0 8px 8px;padding:8px 12px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,.12);">
+                  <a href="http://46.224.63.165/api/media/test-preview/aud_test_ghi789.mp3"
+                     target="_blank"
+                     style="display:inline-flex;align-items:center;gap:8px;background:#1a73e8;color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:bold;">
+                    <span style="font-size:16px;">🎵</span><span>הקלטה קולית</span>
+                  </a>
+                  <div style="text-align:left;margin-top:4px;"><span style="font-size:10px;color:#999;">09:05</span></div>
+                </div>
+              </td><td width="15%"></td>
+            </tr></table>
+          </td></tr>
+
+          <!-- 5: וידאו -->
+          <tr><td style="padding:3px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td width="85%" align="right">
+                <div style="display:inline-block;background:#dcf8c6;border-radius:8px 0 8px 8px;padding:8px 12px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,.12);">
+                  <a href="http://46.224.63.165/api/media/test-preview/vid_test_jkl012.mp4"
+                     target="_blank"
+                     style="display:inline-flex;align-items:center;gap:8px;background:#1a73e8;color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:bold;">
+                    <span style="font-size:16px;">🎥</span><span>סרטון (0.8MB)</span>
+                  </a>
+                  <div style="text-align:left;margin-top:4px;"><span style="font-size:10px;color:#999;">09:07</span></div>
+                </div>
+              </td><td width="15%"></td>
+            </tr></table>
+          </td></tr>
+
+          <!-- 6: PDF -->
+          <tr><td style="padding:3px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td width="85%" align="right">
+                <div style="display:inline-block;background:#dcf8c6;border-radius:8px 0 8px 8px;padding:8px 12px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,.12);">
+                  <a href="http://46.224.63.165/api/media/test-preview/doc_test_def456.pdf"
+                     target="_blank"
+                     style="display:inline-flex;align-items:center;gap:8px;background:#1a73e8;color:#fff;text-decoration:none;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:bold;max-width:240px;word-break:break-word;">
+                    <span style="font-size:16px;">📄</span><span>sample.pdf (0.06MB)</span>
+                  </a>
+                  <div style="text-align:left;margin-top:4px;"><span style="font-size:10px;color:#999;">09:10</span></div>
+                </div>
+              </td><td width="15%"></td>
+            </tr></table>
+          </td></tr>
+
+          <!-- 7: הודעה חדשה אחרונה -->
+          <tr><td style="padding:3px 0;">
+            <table width="100%" cellpadding="0" cellspacing="0"><tr>
+              <td width="85%" align="right">
+                <div style="text-align:center;margin-bottom:6px;">
+                  <span style="background:#e1f3fb;color:#075e54;font-size:11px;padding:3px 10px;border-radius:8px;font-weight:bold;">▼ הודעה חדשה</span>
+                </div>
+                <div style="display:inline-block;background:#dcf8c6;border-radius:8px 0 8px 8px;padding:8px 12px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,.12);">
+                  <div style="font-size:13px;color:#111;line-height:1.5;">הכל הגיע? אפשר לאשר 🙏</div>
+                  <div style="text-align:left;margin-top:4px;"><span style="font-size:10px;color:#999;">09:15</span></div>
+                </div>
+              </td><td width="15%"></td>
+            </tr></table>
+          </td></tr>
+
+        </table>
+      </td></tr>
+
+      <!-- רגל -->
+      <tr><td style="background:#f7f7f7;border-top:1px solid #e0e0e0;border-radius:0 0 12px 12px;padding:8px 18px;">
+        <div style="border-top:2px dashed #ddd;margin:4px 0;"></div>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+
+<script>
+  function openLb(src) {
+    document.getElementById('lb-img').src = src;
+    document.getElementById('lb').classList.add('open');
+  }
+  function closeLb() {
+    document.getElementById('lb').classList.remove('open');
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLb(); });
+</script>
+
+</body>
+</html>

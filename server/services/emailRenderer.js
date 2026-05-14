@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import nodemailer from 'nodemailer';
 import Message from '../models/Message.js';
@@ -55,7 +56,8 @@ const escapeHtml = (s) =>
 
 const mediaBlock = (mediaType, url, label) => {
     if (mediaType === 'image') {
-        return `<img src="${url}" style="max-width:260px;width:100%;border-radius:6px;display:block;">`;
+        // עוטפים בקישור — לחיצה פותחת תמונה מלאה בטאב חדש
+        return `<a href="${url}" target="_blank" style="display:block;"><img src="${url}" style="max-width:260px;width:100%;border-radius:6px;display:block;cursor:pointer;"></a>`;
     }
 
     const icons = { video: '🎥', audio: '🎵', document: '📄' };
@@ -142,6 +144,16 @@ export const sendEmailToTenant = async (tenant, tenantId, fromPhone, senderName,
         renderBubble(m, i === history.length - 1 && m.direction === 'in', tenantId)
     ).join('');
 
+    // הקובץ האחרון מצורף ממש לאימייל — שאר ההיסטוריה רק קישורים
+    const attachments = [];
+    const newestMsg = history.length ? history[history.length - 1] : null;
+    if (newestMsg?.mediaPath && newestMsg.direction === 'in') {
+        try {
+            const buf = fs.readFileSync(newestMsg.mediaPath);
+            attachments.push({ filename: path.basename(newestMsg.mediaPath), content: buf });
+        } catch (e) { /* קובץ נמחק — ממשיכים ללא צירוף */ }
+    }
+
     const html = `
 <!DOCTYPE html>
 <html>
@@ -189,5 +201,6 @@ export const sendEmailToTenant = async (tenant, tenantId, fromPhone, senderName,
         messageId,
         inReplyTo: threadId,
         references: threadId,
+        attachments,
     });
 };
