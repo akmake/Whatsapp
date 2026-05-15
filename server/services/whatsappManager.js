@@ -61,6 +61,12 @@ export const sendMessage = async (tenantId, jid, content) => {
     return await inst.sock.sendMessage(jid, content);
 };
 
+export const sendPresence = async (tenantId, jid, type) => {
+    const inst = instances.get(tenantId);
+    if (!inst?.sock) return;
+    try { await inst.sock.sendPresenceUpdate(type, jid); } catch (e) {}
+};
+
 export const getAllStatuses = () => {
     const result = {};
     for (const [id, inst] of instances) result[id] = inst.status;

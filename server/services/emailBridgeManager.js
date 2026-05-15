@@ -1,6 +1,6 @@
 import imap from 'imap-simple';
 import { simpleParser } from 'mailparser';
-import { isConnected, sendMessage } from './whatsappManager.js';
+import { isConnected, sendMessage, sendPresence } from './whatsappManager.js';
 import { cleanEmailBody, sendEmailToTenant } from './emailRenderer.js';
 import Message from '../models/Message.js';
 import { decrypt } from '../utils/crypto.js';
@@ -10,6 +10,31 @@ export { sendEmailToTenant } from './emailRenderer.js';
 
 let _queueSend = null;
 export const registerQueueSend = (fn) => { _queueSend = fn; };
+
+// ─── סימולציית הקלדה אנושית ─────────────────────────────────
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const rnd   = (min, max) => min + Math.random() * (max - min);
+
+// מדמה בן-אדם שקורא, חושב, ומקליד — לפני כל הודעת טקסט
+const humanTextSend = async (tenantId, jid, text) => {
+    // 1. עיכוב "קריאה" — מדמה שהמשתמש קרא את הכתוב לפני שהתחיל להקליד
+    await sleep(rnd(700, 2000));
+
+    // 2. הצגת "מקליד..." — משך פרופורציונלי לאורך ההודעה (130-200ms לתו), מקסימום 7 שניות
+    const typingMs = Math.min(text.length * rnd(130, 200), 7000);
+    await sendPresence(tenantId, jid, 'composing');
+    await sleep(typingMs);
+    await sendPresence(tenantId, jid, 'paused');
+
+    // 3. רגע קצר "לפני לחיצת שלח"
+    await sleep(rnd(120, 400));
+
+    await sendMessage(tenantId, jid, { text });
+};
+
+// עיכוב קצר בין שליחת קבצים — מדמה "מחפש ומעלה קובץ"
+const humanMediaDelay = () => sleep(rnd(900, 2200));
 
 // tenantId → { connection, emailInterval, healthInterval, stats, isPolling, errorStreak }
 const bridges = new Map();
@@ -93,7 +118,7 @@ const checkForNewEmails = async (tenantId, tenant, bridge) => {
                     const doSend = async () => {
                         const body = cleanEmailBody(parsed.text, tenant.emailSignature);
                         if (body) {
-                            await sendMessage(tenantId, jid, { text: body });
+                            await humanTextSend(tenantId, jid, body);
                             await Message.create({ tenantId, phone, senderName: 'אני', direction: 'out', text: body });
                         }
                         // שולחים רק קבצים שהמשתמש צירף בעצמו (contentDisposition=attachment)
@@ -102,6 +127,7 @@ const checkForNewEmails = async (tenantId, tenant, bridge) => {
                             att => att.contentDisposition === 'attachment'
                         );
                         for (const att of userAttachments) {
+                            await humanMediaDelay(); // עיכוב בין קבצים — מדמה "מחפש ומעלה"
                             let content = {};
                             if (att.contentType.startsWith('image/'))      content = { image: att.content, caption: att.filename };
                             else if (att.contentType.startsWith('video/')) content = { video: att.content, caption: att.filename };
