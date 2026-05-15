@@ -91,7 +91,7 @@ const checkForNewEmails = async (tenantId, tenant, bridge) => {
                     const jid   = `${phone}@s.whatsapp.net`;
 
                     const doSend = async () => {
-                        const body = cleanEmailBody(parsed.text);
+                        const body = cleanEmailBody(parsed.text, tenant.emailSignature);
                         if (body) {
                             await sendMessage(tenantId, jid, { text: body });
                             await Message.create({ tenantId, phone, senderName: 'אני', direction: 'out', text: body });

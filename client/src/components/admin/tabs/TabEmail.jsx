@@ -16,8 +16,13 @@ export default function TabEmail({ tenant: t, onSaved }) {
     };
     const ss = STATUS_STYLE[bsKey] || STATUS_STYLE.inactive;
 
-    const [ef, setEf]             = useState({ bridgeEmail: t.bridgeEmail || '', bridgeEmailPassword: '', destinationEmail: t.destinationEmail || '' });
-    const [saving, setSaving]     = useState(false);
+    const [ef, setEf] = useState({
+        bridgeEmail:         t.bridgeEmail         || '',
+        bridgeEmailPassword: '',
+        destinationEmail:    t.destinationEmail    || '',
+        emailSignature:      t.emailSignature      || '',
+    });
+    const [saving, setSaving]         = useState(false);
     const [saveResult, setSaveResult] = useState(null);
     const set = (k, v) => setEf(p => ({ ...p, [k]: v }));
 
@@ -90,6 +95,37 @@ export default function TabEmail({ tenant: t, onSaved }) {
                         </div>
                     )}
                 </form>
+            </div>
+
+            {/* Signature block — separate save */}
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100 text-right">
+                    <h3 className="text-sm font-semibold text-slate-800">חתימה אוטומטית</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">הטקסט שמוגדר כאן יימחק אוטומטית מכל תגובה לפני שליחה לוואטסאפ</p>
+                </div>
+                <div className="p-5">
+                    <textarea
+                        rows={4}
+                        value={ef.emailSignature}
+                        onChange={e => set('emailSignature', e.target.value)}
+                        placeholder={'בברכה,\nשם המשתמש\n052-0000000'}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition resize-none font-mono"
+                    />
+                    <button
+                        onClick={async () => {
+                            setSaving(true);
+                            try {
+                                await api.put(`/tenants/${t._id}/email-config`, ef);
+                                onSaved();
+                                setSaveResult({ ok: true, msg: 'חתימה נשמרה' });
+                            } catch { setSaveResult({ ok: false, msg: 'שגיאה בשמירת חתימה' }); }
+                            finally { setSaving(false); }
+                        }}
+                        disabled={saving}
+                        className="mt-3 w-full bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white py-2 rounded-lg text-sm font-semibold transition">
+                        שמור חתימה
+                    </button>
+                </div>
             </div>
         </div>
     );

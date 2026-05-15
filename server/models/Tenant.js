@@ -15,9 +15,12 @@ const tenantSchema = new mongoose.Schema({
   nextBillingDate: { type: Date,   default: null },
 
   // Contact
-  contractEmail:   { type: String, default: '' },         // business contact email
+  contractEmail:   { type: String, default: '' },
   tags:            [{ type: String }],
-  internalNotes:   { type: String, default: '' },         // quick one-liner visible in sidebar
+  internalNotes:   { type: String, default: '' },
+
+  // Email reply handling
+  emailSignature:  { type: String, default: '' },         // stripped automatically from replies
 }, { timestamps: true });
 
 export default mongoose.model('Tenant', tenantSchema);

@@ -98,11 +98,11 @@ router.put('/:id/plan', async (req, res) => {
 
 // ─── עדכון הגדרות מייל ────────────────────────────────────────────
 router.put('/:id/email-config', async (req, res) => {
-    const { bridgeEmail, bridgeEmailPassword, destinationEmail } = req.body;
+    const { bridgeEmail, bridgeEmailPassword, destinationEmail, emailSignature } = req.body;
     if (!bridgeEmail || !destinationEmail)
         return res.status(400).json({ error: 'כתובות המייל הן חובה' });
 
-    const update = { bridgeEmail, destinationEmail };
+    const update = { bridgeEmail, destinationEmail, emailSignature: emailSignature || '' };
     if (bridgeEmailPassword) update.bridgeEmailPassword = encrypt(bridgeEmailPassword);
 
     const tenant = await Tenant.findByIdAndUpdate(req.params.id, update, { new: true });

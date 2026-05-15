@@ -33,7 +33,7 @@ const getTransporter = (tenant) => {
 
 // ─── ניקוי גוף מייל ─────────────────────────────────────────────
 
-export const cleanEmailBody = (text) => {
+export const cleanEmailBody = (text, signature = '') => {
     if (!text) return '';
     const lines = text.split(/\r?\n/);
     let bodyLines = [];
@@ -45,7 +45,15 @@ export const cleanEmailBody = (text) => {
         bodyLines.push(line);
     }
     const sepIdx = bodyLines.findIndex(l => /^--\s*$/.test(l.trim()));
-    if (sepIdx !== -1) return bodyLines.slice(0, sepIdx).join('\n').trim();
+    if (sepIdx !== -1) bodyLines = bodyLines.slice(0, sepIdx);
+
+    // חיתוך חתימה מוגדרת — מחפש את השורה הראשונה של החתימה
+    if (signature?.trim()) {
+        const firstSigLine = signature.trim().split(/\r?\n/)[0].trim();
+        const sigIdx = bodyLines.findIndex(l => l.trim() === firstSigLine);
+        if (sigIdx !== -1) bodyLines = bodyLines.slice(0, sigIdx);
+    }
+
     return bodyLines.join('\n').trim();
 };
 
