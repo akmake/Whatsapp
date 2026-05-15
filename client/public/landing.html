@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WA Bridge — ניהול וואטסאפ חכם ממייל</title>
+<meta name="description" content="מקבל הודעות וואטסאפ, עונה ישר מהמייל. בלי אפליקציות, בלי מורכבות. פשוט עובד.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --g:#25d366;--gd:#128c7e;--dk:#075e54;
+  --gr50:#f8fafc;--gr100:#f1f5f9;--gr200:#e2e8f0;
+  --gr500:#64748b;--gr700:#334155;--gr900:#0f172a;
+}
+html{scroll-behavior:smooth}
+body{font-family:'Heebo',sans-serif;direction:rtl;color:var(--gr700);background:#fff;overflow-x:hidden}
+
+/* ─── NAV ──────────────────────────────────────── */
+nav{
+  position:fixed;top:0;right:0;left:0;z-index:200;
+  height:64px;padding:0 32px;
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(255,255,255,.88);backdrop-filter:blur(18px);
+  border-bottom:1px solid rgba(37,211,102,.12);
+  transition:box-shadow .3s;
+}
+nav.scrolled{box-shadow:0 4px 24px rgba(0,0,0,.08)}
+.logo{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:900;color:var(--dk);text-decoration:none}
+.logo-icon{
+  width:38px;height:38px;border-radius:12px;
+  background:linear-gradient(135deg,var(--g),var(--gd));
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+  box-shadow:0 4px 14px rgba(37,211,102,.35);
+}
+.nav-cta{
+  background:var(--g);color:#fff;text-decoration:none;
+  padding:10px 24px;border-radius:50px;
+  font-size:14px;font-weight:700;
+  box-shadow:0 4px 16px rgba(37,211,102,.35);
+  transition:all .22s;
+}
+.nav-cta:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(37,211,102,.45)}
+
+/* ─── HERO ─────────────────────────────────────── */
+.hero{
+  min-height:100vh;padding:90px 32px 70px;
+  background:linear-gradient(150deg,#041f13 0%,#075e54 45%,#0c3d30 75%,#030f08 100%);
+  display:flex;align-items:center;position:relative;overflow:hidden;
+}
+/* dot grid */
+.hero::before{
+  content:'';position:absolute;inset:0;
+  background-image:radial-gradient(rgba(255,255,255,.045) 1px,transparent 1px);
+  background-size:36px 36px;
+}
+/* glow orbs */
+.orb{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none}
+.orb1{width:560px;height:560px;background:rgba(37,211,102,.18);top:-140px;left:-100px;animation:breathe 7s ease-in-out infinite}
+.orb2{width:440px;height:440px;background:rgba(18,140,126,.22);bottom:-120px;right:-80px;animation:breathe 9s ease-in-out infinite reverse}
+.orb3{width:280px;height:280px;background:rgba(37,211,102,.12);top:40%;left:40%;animation:breathe 5s ease-in-out infinite 2s}
+@keyframes breathe{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.2);opacity:1}}
+
+.hero-inner{
+  max-width:1120px;margin:0 auto;width:100%;
+  display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;
+  position:relative;z-index:1;
+}
+.badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(37,211,102,.15);border:1px solid rgba(37,211,102,.3);
+  color:#7defa7;padding:6px 16px;border-radius:50px;
+  font-size:13px;font-weight:600;margin-bottom:26px;
+}
+.badge-dot{width:7px;height:7px;border-radius:50%;background:var(--g);animation:blink 1.6s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+h1{
+  font-size:clamp(34px,5vw,60px);font-weight:900;
+  color:#fff;line-height:1.13;margin-bottom:22px;
+}
+.hl{
+  background:linear-gradient(135deg,#25d366 20%,#7defa7 80%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.hero p{
+  font-size:18px;color:rgba(255,255,255,.72);
+  line-height:1.75;margin-bottom:38px;font-weight:400;
+}
+.btns{display:flex;gap:14px;flex-wrap:wrap}
+.btn-g{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--g);color:#fff;text-decoration:none;
+  padding:15px 32px;border-radius:50px;
+  font-size:16px;font-weight:800;
+  box-shadow:0 10px 32px rgba(37,211,102,.45);
+  transition:all .25s;
+}
+.btn-g:hover{transform:translateY(-2px);box-shadow:0 16px 44px rgba(37,211,102,.55)}
+.btn-o{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);
+  color:#fff;text-decoration:none;
+  padding:15px 30px;border-radius:50px;
+  font-size:15px;font-weight:600;backdrop-filter:blur(10px);
+  transition:all .25s;
+}
+.btn-o:hover{background:rgba(255,255,255,.18)}
+
+/* ─── PHONE 3D ─────────────────────────────────── */
+.phone-scene{display:flex;justify-content:center;align-items:center;perspective:1200px}
+.phone-3d{
+  animation:float 5s ease-in-out infinite;
+  filter:drop-shadow(-28px 36px 70px rgba(0,0,0,.55));
+}
+@keyframes float{
+  0%,100%{transform:rotateY(-18deg) rotateX(6deg) translateY(0)}
+  50%{transform:rotateY(-18deg) rotateX(6deg) translateY(-16px)}
+}
+.phone{
+  width:238px;background:#111;border-radius:40px;padding:10px 10px 14px;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.12),0 0 0 2px #000;
+}
+.notch{width:76px;height:22px;background:#111;border-radius:0 0 14px 14px;margin:0 auto 3px;position:relative;z-index:2}
+.screen{background:#e5ddd5;border-radius:30px;overflow:hidden;height:430px;display:flex;flex-direction:column}
+.wa-header{
+  background:#075e54;padding:10px 14px;
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+}
+.wa-av{
+  width:36px;height:36px;border-radius:50%;
+  background:var(--g);display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:#fff;font-weight:800;flex-shrink:0;
+}
+.wa-info .name{color:#fff;font-size:13px;font-weight:700}
+.wa-info .sub{color:rgba(255,255,255,.65);font-size:10px}
+.wa-msgs{flex:1;padding:12px 8px;display:flex;flex-direction:column;gap:7px;overflow:hidden}
+.bbl{
+  max-width:80%;padding:8px 11px;font-size:12px;line-height:1.5;
+  border-radius:10px;opacity:0;
+  animation:pop .35s ease forwards;
+  word-break:break-word;
+}
+.bbl.in{background:#fff;border-radius:0 10px 10px 10px;align-self:flex-start;color:#111}
+.bbl.out{background:#dcf8c6;border-radius:10px 10px 0 10px;align-self:flex-end;color:#111}
+.bbl .t{font-size:9px;color:#999;text-align:left;margin-top:3px}
+@keyframes pop{from{opacity:0;transform:scale(.84) translateY(8px)}to{opacity:1;transform:none}}
+
+/* typing indicator */
+.typing{
+  display:none;align-items:center;gap:4px;
+  background:#fff;border-radius:0 10px 10px 10px;
+  padding:8px 12px;align-self:flex-start;max-width:60px;
+}
+.typing.show{display:flex}
+.typing span{
+  width:6px;height:6px;border-radius:50%;background:#bbb;
+  animation:bounce 1.1s infinite;
+}
+.typing span:nth-child(2){animation-delay:.18s}
+.typing span:nth-child(3){animation-delay:.36s}
+@keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
+
+/* ─── STATS BAR ─────────────────────────────────── */
+.stats{background:var(--gr50);border-top:1px solid var(--gr200);border-bottom:1px solid var(--gr200);padding:52px 32px}
+.stats-row{max-width:860px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:20px;text-align:center}
+.stat-n{
+  font-size:44px;font-weight:900;
+  background:linear-gradient(135deg,var(--dk),var(--g));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+  line-height:1;
+}
+.stat-l{font-size:14px;color:var(--gr500);font-weight:500;margin-top:6px}
+
+/* ─── HOW IT WORKS ──────────────────────────────── */
+.how{padding:110px 32px;background:#fff}
+.sh{text-align:center;margin-bottom:64px}
+.sh h2{font-size:clamp(26px,4vw,44px);font-weight:900;color:var(--gr900);margin-bottom:14px}
+.sh p{font-size:17px;color:var(--gr500);max-width:520px;margin:0 auto;line-height:1.7}
+.steps{max-width:920px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:40px;position:relative}
+.steps::after{
+  content:'';position:absolute;top:50px;
+  right:calc(16.6% + 24px);left:calc(16.6% + 24px);
+  height:2px;
+  background:linear-gradient(90deg,var(--g) 0%,var(--gd) 50%,var(--g) 100%);
+}
+.step{text-align:center;position:relative;z-index:1}
+.step-ic{
+  width:100px;height:100px;border-radius:28px;
+  background:linear-gradient(135deg,var(--g),var(--gd));
+  display:flex;align-items:center;justify-content:center;
+  font-size:42px;margin:0 auto 22px;
+  box-shadow:0 16px 40px rgba(37,211,102,.3);
+}
+.step h3{font-size:18px;font-weight:800;color:var(--gr900);margin-bottom:10px}
+.step p{font-size:14px;color:var(--gr500);line-height:1.65}
+
+/* ─── FEATURES ─────────────────────────────────── */
+.features{padding:110px 32px;background:linear-gradient(180deg,var(--gr50) 0%,#fff 100%)}
+.feat-grid{max-width:1040px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.fc{
+  background:#fff;border:1px solid var(--gr200);border-radius:22px;padding:30px;
+  position:relative;overflow:hidden;transition:all .3s;
+}
+.fc::after{
+  content:'';position:absolute;top:-30px;right:-30px;
+  width:100px;height:100px;border-radius:50%;
+  background:radial-gradient(circle,rgba(37,211,102,.07),transparent 70%);
+}
+.fc:hover{transform:translateY(-5px);box-shadow:0 22px 54px rgba(37,211,102,.13);border-color:rgba(37,211,102,.3)}
+.fc-ic{font-size:34px;margin-bottom:14px}
+.fc h3{font-size:16px;font-weight:800;color:var(--gr900);margin-bottom:8px}
+.fc p{font-size:14px;color:var(--gr500);line-height:1.65}
+
+/* ─── TESTIMONIAL ───────────────────────────────── */
+.testi{
+  padding:90px 32px;
+  background:linear-gradient(135deg,#041f13,#075e54);
+  position:relative;overflow:hidden;
+}
+.testi::before{
+  content:'';position:absolute;inset:0;
+  background-image:radial-gradient(rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:28px 28px;
+}
+.testi-inner{max-width:680px;margin:0 auto;text-align:center;position:relative;z-index:1}
+.testi-q{font-size:54px;color:rgba(37,211,102,.4);line-height:.7;font-family:serif;margin-bottom:12px}
+.testi-text{font-size:22px;font-weight:600;color:#fff;line-height:1.6;margin-bottom:24px}
+.testi-by{
+  display:inline-flex;align-items:center;gap:12px;
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);
+  padding:10px 20px;border-radius:50px;
+}
+.testi-av{
+  width:36px;height:36px;border-radius:50%;background:var(--g);
+  display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;
+}
+.testi-name{font-size:13px;font-weight:700;color:#fff}
+.testi-role{font-size:12px;color:rgba(255,255,255,.6)}
+
+/* ─── PRICING ───────────────────────────────────── */
+.pricing{padding:110px 32px;background:#fff}
+.plans{max-width:780px;margin:0 auto;display:grid;grid-template-columns:1fr 1.08fr;gap:22px;align-items:center}
+.plan{border:2px solid var(--gr200);border-radius:26px;padding:36px;background:#fff;position:relative}
+.plan.pop{
+  border-color:var(--g);
+  background:linear-gradient(160deg,#f2fff7,#fff);
+  box-shadow:0 24px 64px rgba(37,211,102,.16);
+}
+.plan-tag{
+  position:absolute;top:-14px;left:50%;transform:translateX(-50%);
+  background:var(--g);color:#fff;padding:4px 18px;border-radius:50px;
+  font-size:12px;font-weight:800;white-space:nowrap;
+}
+.plan-name{font-size:13px;font-weight:700;color:var(--gr500);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em}
+.plan-pr{display:flex;align-items:baseline;gap:3px;margin-bottom:6px}
+.plan-pr .cur{font-size:22px;font-weight:700;color:var(--gr700);align-self:flex-start;margin-top:10px}
+.plan-pr .am{font-size:54px;font-weight:900;color:var(--gr900);line-height:1}
+.plan-pr .per{font-size:14px;color:var(--gr500)}
+.plan-desc{font-size:13px;color:var(--gr500);margin-bottom:26px}
+.plan-ul{list-style:none;margin-bottom:28px}
+.plan-ul li{font-size:14px;color:var(--gr700);padding:6px 0;display:flex;align-items:center;gap:9px;border-bottom:1px solid var(--gr100)}
+.plan-ul li:last-child{border:none}
+.plan-ul li::before{content:'✓';color:var(--g);font-weight:900;font-size:15px;flex-shrink:0}
+.pb{
+  display:block;text-align:center;width:100%;
+  padding:14px;border-radius:50px;
+  font-family:'Heebo',sans-serif;font-size:15px;font-weight:800;
+  cursor:pointer;border:none;text-decoration:none;transition:all .25s;
+}
+.pb.out{border:2px solid var(--gr200);color:var(--gr700);background:transparent}
+.pb.out:hover{border-color:var(--g);color:var(--dk)}
+.pb.solid{background:var(--g);color:#fff;box-shadow:0 8px 26px rgba(37,211,102,.38)}
+.pb.solid:hover{transform:translateY(-1px);box-shadow:0 14px 36px rgba(37,211,102,.48)}
+
+/* ─── CTA ────────────────────────────────────────── */
+.cta{
+  padding:110px 32px;text-align:center;
+  background:linear-gradient(135deg,#031a0e 0%,#075e54 50%,#25d366 100%);
+  position:relative;overflow:hidden;
+}
+.cta::before{
+  content:'';position:absolute;inset:0;
+  background-image:radial-gradient(rgba(255,255,255,.04) 1px,transparent 1px);
+  background-size:28px 28px;
+}
+.cta h2{font-size:clamp(28px,4vw,50px);font-weight:900;color:#fff;margin-bottom:16px;position:relative;z-index:1}
+.cta p{font-size:18px;color:rgba(255,255,255,.82);margin-bottom:40px;position:relative;z-index:1}
+.wa-btn{
+  display:inline-flex;align-items:center;gap:12px;
+  background:#fff;color:var(--dk);text-decoration:none;
+  padding:18px 38px;border-radius:50px;
+  font-family:'Heebo',sans-serif;font-size:18px;font-weight:900;
+  box-shadow:0 14px 44px rgba(0,0,0,.22);
+  transition:all .25s;position:relative;z-index:1;
+}
+.wa-btn:hover{transform:translateY(-3px);box-shadow:0 22px 56px rgba(0,0,0,.28)}
+.wa-btn svg{width:26px;height:26px;fill:var(--g);flex-shrink:0}
+
+/* ─── FOOTER ─────────────────────────────────────── */
+footer{background:var(--gr900);color:rgba(255,255,255,.45);padding:36px 32px;text-align:center;font-size:13px}
+footer strong{color:rgba(255,255,255,.75)}
+footer a{color:rgba(255,255,255,.45);text-decoration:none}
+
+/* ─── SCROLL REVEAL ──────────────────────────────── */
+.fu{opacity:0;transform:translateY(28px);transition:opacity .65s ease,transform .65s ease}
+.fu.vis{opacity:1;transform:none}
+
+/* ─── RESPONSIVE ─────────────────────────────────── */
+@media(max-width:860px){
+  .hero-inner{grid-template-columns:1fr;text-align:center;gap:40px}
+  .phone-scene{order:-1}
+  .steps{grid-template-columns:1fr;gap:28px}
+  .steps::after{display:none}
+  .feat-grid{grid-template-columns:1fr 1fr}
+  .plans{grid-template-columns:1fr}
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .btns{justify-content:center}
+}
+@media(max-width:500px){
+  .feat-grid{grid-template-columns:1fr}
+  .stats-row{grid-template-columns:1fr 1fr}
+  nav{padding:0 18px}
+  .hero{padding:80px 18px 50px}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <a class="logo" href="#">
+    <div class="logo-icon">💬</div>
+    WA Bridge
+  </a>
+  <a href="#contact" class="nav-cta">התחל עכשיו</a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+  <div class="hero-inner">
+    <div class="hero-text">
+      <div class="badge"><span class="badge-dot"></span> גרסת בטא פעילה — מקומות מוגבלים</div>
+      <h1>נהל את<br><span class="hl">וואטסאפ העסקי</span><br>ממייל רגיל</h1>
+      <p>לקוח כתב לך בוואטסאפ? מקבל במייל, עונה מהמייל — ההודעה מגיעה אליו בוואטסאפ תוך שניות.<br>בלי אפליקציות, בלי מורכבות.</p>
+      <div class="btns">
+        <a href="#contact" class="btn-g">🚀 &nbsp;התחל עכשיו</a>
+        <a href="#how" class="btn-o">← איך זה עובד?</a>
+      </div>
+    </div>
+
+    <!-- Phone mock -->
+    <div class="phone-scene">
+      <div class="phone-3d">
+        <div class="phone">
+          <div class="notch"></div>
+          <div class="screen">
+            <div class="wa-header">
+              <div class="wa-av">י</div>
+              <div class="wa-info">
+                <div class="name">יצחק אברהם</div>
+                <div class="sub">מחובר</div>
+              </div>
+            </div>
+            <div class="wa-msgs" id="msgs">
+              <div class="typing" id="typing"><span></span><span></span><span></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="stats">
+  <div class="stats-row">
+    <div><div class="stat-n" data-to="2" data-sfx="&nbsp;שניות">0</div><div class="stat-l">זמן העברה ממוצע</div></div>
+    <div><div class="stat-n" data-to="100" data-sfx="%">0%</div><div class="stat-l">היסטוריה שמורה</div></div>
+    <div><div class="stat-n" data-to="0" data-sfx="">0</div><div class="stat-l">אפליקציות להתקין</div></div>
+    <div><div class="stat-n" data-to="24" data-sfx="/7">0</div><div class="stat-l">זמינות המערכת</div></div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how" id="how">
+  <div class="sh fu">
+    <h2>איך זה עובד?</h2>
+    <p>שלושה שלבים — ואתה מנהל את כל הוואטסאפ ממקום אחד</p>
+  </div>
+  <div class="steps">
+    <div class="step fu">
+      <div class="step-ic">📱</div>
+      <h3>לקוח כותב</h3>
+      <p>ההודעה מגיעה לוואטסאפ העסקי שלך — כולל תמונות, קולות ומסמכים</p>
+    </div>
+    <div class="step fu" style="transition-delay:.15s">
+      <div class="step-ic">📧</div>
+      <h3>אתה מקבל במייל</h3>
+      <p>המערכת מעבירה הכל לתיבת הדואר שלך — עם כל ההיסטוריה מסודרת בצורת שיחה</p>
+    </div>
+    <div class="step fu" style="transition-delay:.3s">
+      <div class="step-ic">↩️</div>
+      <h3>Reply — וזהו</h3>
+      <p>לוחץ Reply, כותב — תגובתך מגיעה ללקוח בוואטסאפ תוך שניות</p>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div class="sh fu">
+    <h2>כל מה שצריך, כבר מהיום הראשון</h2>
+    <p>מערכת מלאה שעובדת — בלי הגדרות מסובכות</p>
+  </div>
+  <div class="feat-grid">
+    <div class="fc fu"><div class="fc-ic">📂</div><h3>היסטוריה מלאה</h3><p>כל הודעה מגיעה עם כל ההיסטוריה היומית — לא מפספסים הקשר</p></div>
+    <div class="fc fu" style="transition-delay:.08s"><div class="fc-ic">🖼️</div><h3>תמונות, קבצים, סרטונים</h3><p>כל סוגי המדיה מגיעים ישירות למייל — לחיצה אחת לפתיחה</p></div>
+    <div class="fc fu" style="transition-delay:.16s"><div class="fc-ic">✍️</div><h3>חיתוך חתימה חכם</h3><p>הגדר את החתימה שלך פעם אחת — נמחקת אוטומטית מכל תגובה</p></div>
+    <div class="fc fu" style="transition-delay:.24s"><div class="fc-ic">🔒</div><h3>פרטיות ואבטחה מלאה</h3><p>כל הנתונים מוצפנים. הסיסמאות מאוחסנות בצורה מאובטחת בלבד</p></div>
+    <div class="fc fu" style="transition-delay:.32s"><div class="fc-ic">📊</div><h3>לוח ניהול מלא</h3><p>ממשק מנהל לניהול לקוחות, חיובים, תפעול — הכל ממקום אחד</p></div>
+    <div class="fc fu" style="transition-delay:.4s"><div class="fc-ic">⚡</div><h3>שניות — לא דקות</h3><p>ההעברה בין וואטסאפ למייל ובחזרה מתרחשת תוך שניות בודדות בלבד</p></div>
+  </div>
+</section>
+
+<!-- TESTIMONIAL -->
+<section class="testi">
+  <div class="testi-inner fu">
+    <div class="testi-q">"</div>
+    <div class="testi-text">
+      פשוט פותח את הג'ימייל שלי בבוקר, עונה על כל ההודעות כמו מיילים רגילים — וכולן מגיעות ישר לוואטסאפ של הלקוחות. חסך לי שעות.
+    </div>
+    <div class="testi-by">
+      <div class="testi-av">מ</div>
+      <div>
+        <div class="testi-name">מנחם שפירא</div>
+        <div class="testi-role">בעל עסק, ירושלים</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="pricing">
+  <div class="sh fu">
+    <h2>מחירים שקופים</h2>
+    <p>מחירי השקה לנרשמים הראשונים — נעלים ונעצור כשנגיע למכסה</p>
+  </div>
+  <div class="plans fu">
+    <div class="plan">
+      <div class="plan-name">בסיסי</div>
+      <div class="plan-pr"><span class="cur">₪</span><span class="am">149</span><span class="per">/ חודש</span></div>
+      <p class="plan-desc">מושלם לעצמאי או עסק קטן</p>
+      <ul class="plan-ul">
+        <li>מספר וואטסאפ אחד</li>
+        <li>העברה ל-Gmail</li>
+        <li>תמונות וקבצים</li>
+        <li>תמיכה בסיסית</li>
+      </ul>
+      <a href="#contact" class="pb out">בחר תוכנית</a>
+    </div>
+    <div class="plan pop">
+      <div class="plan-tag">הכי פופולרי</div>
+      <div class="plan-name">עסקי</div>
+      <div class="plan-pr"><span class="cur">₪</span><span class="am">249</span><span class="per">/ חודש</span></div>
+      <p class="plan-desc">לעסקים שרוצים את כל הכלים</p>
+      <ul class="plan-ul">
+        <li>כל מה שבבסיסי</li>
+        <li>חיתוך חתימה אוטומטי</li>
+        <li>שמע, וידאו, אנשי קשר</li>
+        <li>לוח ניהול מתקדם</li>
+        <li>תמיכה עדיפות</li>
+        <li>חוזה שירות + ערבות</li>
+      </ul>
+      <a href="#contact" class="pb solid">התחל עכשיו</a>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta" id="contact">
+  <h2>מוכן להתחיל?</h2>
+  <p>כתוב לנו עכשיו — הגדרה מלאה תוך 24 שעות, ואתה מתחיל לעבוד</p>
+  <a href="https://wa.me/972XXXXXXXXX?text=%D7%94%D7%99%D7%99%2C%20%D7%90%D7%A0%D7%99%20%D7%A8%D7%95%D7%A6%D7%94%20%D7%9C%D7%A9%D7%9E%D7%95%D7%A2%20%D7%A2%D7%9C%20WA%20Bridge" class="wa-btn" target="_blank">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+      <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.116 1.524 5.847L0 24l6.327-1.499A11.933 11.933 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.6a9.577 9.577 0 01-5.023-1.42l-.36-.214-3.735.885.934-3.619-.234-.373A9.555 9.555 0 012.4 12C2.4 6.698 6.698 2.4 12 2.4S21.6 6.698 21.6 12 17.302 21.6 12 21.6z"/>
+    </svg>
+    שלח לנו וואטסאפ
+  </a>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <strong>WA Bridge</strong> — גשר בין וואטסאפ למייל &nbsp;·&nbsp;
+  <a href="/contract.html">חוזה שירות</a> &nbsp;·&nbsp;
+  © 2025 כל הזכויות שמורות &nbsp;·&nbsp; גרסת בטא
+</footer>
+
+<script>
+// Navbar shadow on scroll
+const nav = document.getElementById('nav');
+addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 20));
+
+// ─── Phone chat animation ───────────────────────────────────
+const conversations = [
+  [
+    {dir:'in',  text:'שלום! מה שעות הפתיחה?'},
+    {dir:'out', text:'שלום! פתוחים א-ה 09:00-18:00 😊'},
+    {dir:'in',  text:'תודה! ואפשר להזמין בוואטסאפ?'},
+    {dir:'out', text:'בטח! שלח פרטים ואחזור אליך 👍'},
+  ],
+  [
+    {dir:'in',  text:'כמה עולה השירות החודשי?'},
+    {dir:'out', text:'יש שתי תוכניות — החל מ-₪149 לחודש'},
+    {dir:'in',  text:'מעולה, אשלח לך מסמך'},
+    {dir:'out', text:'קיבלתי! אבדוק ואחזור אליך תוך שעה ✅'},
+  ],
+];
+
+const msgsEl = document.getElementById('msgs');
+const typingEl = document.getElementById('typing');
+let ci = 0;
+
+function delay(ms){ return new Promise(r => setTimeout(r, ms)) }
+
+async function runConv() {
+  msgsEl.innerHTML = '';
+  msgsEl.appendChild(typingEl);
+  const conv = conversations[ci % conversations.length];
+  ci++;
+  for (const m of conv) {
+    typingEl.classList.add('show');
+    await delay(900);
+    typingEl.classList.remove('show');
+    const el = document.createElement('div');
+    el.className = `bbl ${m.dir}`;
+    const now = new Date();
+    el.innerHTML = m.text + `<div class="t">${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}</div>`;
+    msgsEl.insertBefore(el, typingEl);
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+    await delay(1400);
+  }
+  await delay(2400);
+  runConv();
+}
+runConv();
+
+// ─── Scroll reveal ──────────────────────────────────────────
+const io = new IntersectionObserver(
+  entries => entries.forEach(e => { if(e.isIntersecting) e.target.classList.add('vis') }),
+  { threshold: 0.12 }
+);
+document.querySelectorAll('.fu').forEach(el => io.observe(el));
+
+// ─── Counter animation ──────────────────────────────────────
+const countIO = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (!e.isIntersecting) return;
+    const el = e.target;
+    const target = +el.dataset.to;
+    const sfx = el.dataset.sfx || '';
+    let cur = 0;
+    const step = Math.max(1, Math.ceil(target / 50));
+    const t = setInterval(() => {
+      cur = Math.min(cur + step, target);
+      el.innerHTML = cur + sfx;
+      if (cur >= target) clearInterval(t);
+    }, 36);
+    countIO.unobserve(el);
+  });
+}, { threshold: 0.5 });
+document.querySelectorAll('.stat-n[data-to]').forEach(el => countIO.observe(el));
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  });
+});
+</script>
+</body>
+</html>
