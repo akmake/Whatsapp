@@ -86,7 +86,7 @@ const mediaBlock = (mediaType, url, label) => {
         </a>`;
 };
 
-const renderBubble = (msg, isNew, tenantId) => {
+const renderBubble = (msg, isNew, tenantId, isGroupThread = false) => {
     const isIn = msg.direction === 'in';
     const time = new Date(msg.createdAt).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
     const bubbleBg  = isIn ? '#ffffff' : '#dcf8c6';
@@ -95,21 +95,40 @@ const renderBubble = (msg, isNew, tenantId) => {
     const tdL       = isIn  ? '<td width="15%"></td>' : '';
     const tdR       = !isIn ? '<td width="15%"></td>' : '';
     const checks    = isIn  ? '' : '<span style="font-size:12px;color:#53bdeb;margin-right:3px;">✓✓</span>';
+    const senderLabel = (isGroupThread && isIn && msg.senderName)
+        ? `<div style="font-size:11px;font-weight:bold;color:#075e54;margin-bottom:2px;direction:rtl;">${escapeHtml(msg.senderName)}</div>`
+        : '';
 
     let contentHtml;
     if (msg.mediaPath && msg.mediaType) {
         const filename = path.basename(msg.mediaPath);
         const url      = `${PUBLIC_URL}/api/media/${tenantId}/${filename}`;
-        const label    = msg.text && !['📷 תמונה','🎥 סרטון','🎵 הקלטה קולית'].includes(msg.text)
-                         ? msg.text
-                         : filename;
+        const GENERIC  = ['📷 תמונה', '🎥 סרטון', '🎵 הקלטה קולית'];
+        const isAudio  = msg.mediaType === 'audio';
+        const label    = isAudio
+                         ? '🎵 הקלטה קולית'
+                         : (msg.text && !GENERIC.includes(msg.text) ? msg.text : filename);
         const block = mediaBlock(msg.mediaType, url, label);
-        const caption = (msg.text && msg.mediaType !== 'image')
-            ? `<div style="font-size:12px;color:#666;margin-top:4px;direction:rtl;">${escapeHtml(msg.text)}</div>`
-            : '';
+
+        const hasTranscript = isAudio && msg.text && !GENERIC.includes(msg.text);
+        const caption = hasTranscript
+            ? `<div style="font-size:13px;color:#333;margin-top:6px;direction:rtl;font-style:italic;padding:6px 10px;background:#f0f9f4;border-right:3px solid #25d366;border-radius:4px;line-height:1.5;">"${escapeHtml(msg.text)}"</div>`
+            : (msg.text && !isAudio && msg.mediaType !== 'image')
+                ? `<div style="font-size:12px;color:#666;margin-top:4px;direction:rtl;">${escapeHtml(msg.text)}</div>`
+                : '';
         contentHtml = block + caption;
     } else {
-        contentHtml = `<div style="font-size:13px;color:#111;line-height:1.5;direction:rtl;">${escapeHtml(msg.text)}</div>`;
+        // Location — convert Google Maps URL to clickable link
+        const locationMatch = msg.text?.match(/^(📍[^\n]*)\n(https:\/\/maps\.google\.com[^\s]+)$/);
+        if (locationMatch) {
+            contentHtml = `
+                <div style="font-size:13px;color:#111;direction:rtl;margin-bottom:6px;">${escapeHtml(locationMatch[1])}</div>
+                <a href="${locationMatch[2]}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#1a73e8;color:#fff;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:bold;">
+                    🗺 פתח במפות
+                </a>`;
+        } else {
+            contentHtml = `<div style="font-size:13px;color:#111;line-height:1.5;direction:rtl;">${escapeHtml(msg.text)}</div>`;
+        }
     }
 
     return `
@@ -119,7 +138,7 @@ const renderBubble = (msg, isNew, tenantId) => {
         <td width="85%" align="${align}">
           ${isNew ? '<div style="text-align:center;margin-bottom:6px;"><span style="background:#e1f3fb;color:#075e54;font-size:11px;padding:3px 10px;border-radius:8px;font-weight:bold;">▼ הודעה חדשה</span></div>' : ''}
           <div style="display:inline-block;background:${bubbleBg};border-radius:${borderRad};padding:8px 12px;max-width:100%;text-align:right;direction:rtl;box-shadow:0 1px 2px rgba(0,0,0,0.12);">
-            ${contentHtml}
+            ${senderLabel}${contentHtml}
             <div style="text-align:left;margin-top:4px;">${checks}<span style="font-size:10px;color:#999;">${time}</span></div>
           </div>
         </td>
@@ -130,26 +149,31 @@ const renderBubble = (msg, isNew, tenantId) => {
 
 // ─── שליחת מייל ─────────────────────────────────────────────────
 
-export const sendEmailToTenant = async (tenant, tenantId, fromPhone, senderName, textContent) => {
+export const sendEmailToTenant = async (tenant, tenantId, fromPhone, senderName, textContent, groupContext = null) => {
     const transporter = getTransporter(tenant);
 
-    const subject   = `WA_MSG: ${fromPhone}`;
-    const threadId  = `<wa-thread-${tenant._id}-${fromPhone}@bridge>`;
-    const messageId = `<wa-${tenant._id}-${fromPhone}-${Date.now()}@bridge>`;
+    const subject  = groupContext
+        ? `WA_GRP: ${groupContext.groupId} [${groupContext.groupName}]`
+        : `WA_MSG: ${fromPhone}`;
+    const threadId  = groupContext
+        ? `<wa-thread-${tenant._id}-grp-${groupContext.groupId}@bridge>`
+        : `<wa-thread-${tenant._id}-${fromPhone}@bridge>`;
+    const messageId = `<wa-${tenant._id}-${Date.now()}@bridge>`;
 
     const now = new Date();
     const dateStr = now.toLocaleDateString('he-IL');
 
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
-    const history = await Message.find({
-        tenantId: tenant._id.toString(),
-        phone: fromPhone,
-        createdAt: { $gte: startOfDay },
-    }).sort({ createdAt: 1 }).lean();
+
+    const historyQuery = groupContext
+        ? { tenantId: tenant._id.toString(), groupJid: groupContext.groupId, createdAt: { $gte: startOfDay } }
+        : { tenantId: tenant._id.toString(), phone: fromPhone, createdAt: { $gte: startOfDay } };
+
+    const history = await Message.find(historyQuery).sort({ createdAt: 1 }).lean();
 
     const bubblesHtml = history.map((m, i) =>
-        renderBubble(m, i === history.length - 1 && m.direction === 'in', tenantId)
+        renderBubble(m, i === history.length - 1 && m.direction === 'in', tenantId, !!groupContext)
     ).join('');
 
     // הקובץ האחרון מצורף ממש לאימייל — שאר ההיסטוריה רק קישורים
@@ -177,12 +201,16 @@ export const sendEmailToTenant = async (tenant, tenantId, fromPhone, senderName,
         <table width="100%" cellpadding="0" cellspacing="0"><tr>
           <td style="width:44px;vertical-align:middle;">
             <div style="width:40px;height:40px;border-radius:50%;background:#25d366;text-align:center;line-height:40px;font-size:18px;color:#fff;font-weight:bold;">
-              ${(senderName || fromPhone).charAt(0).toUpperCase()}
+              ${groupContext ? '👥' : (senderName || fromPhone).charAt(0).toUpperCase()}
             </div>
           </td>
           <td style="padding-right:10px;vertical-align:middle;">
-            <div style="color:#fff;font-size:15px;font-weight:bold;direction:rtl;">${escapeHtml(senderName)}</div>
-            <div style="color:#b2dfdb;font-size:12px;">+${fromPhone}</div>
+            ${groupContext
+                ? `<div style="color:#fff;font-size:15px;font-weight:bold;direction:rtl;">${escapeHtml(groupContext.groupName)}</div>
+                   <div style="color:#b2dfdb;font-size:12px;direction:rtl;">${escapeHtml(senderName)} · +${fromPhone}</div>`
+                : `<div style="color:#fff;font-size:15px;font-weight:bold;direction:rtl;">${escapeHtml(senderName)}</div>
+                   <div style="color:#b2dfdb;font-size:12px;">+${fromPhone}</div>`
+            }
           </td>
           <td align="left" style="vertical-align:middle;">
             <div style="color:#b2dfdb;font-size:11px;">${dateStr}</div>

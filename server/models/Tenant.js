@@ -21,6 +21,10 @@ const tenantSchema = new mongoose.Schema({
 
   // Email reply handling
   emailSignature:  { type: String, default: '' },         // stripped automatically from replies
+
+  // Groups
+  groupsEnabled:   { type: Boolean, default: false },
+  allowedGroups:   [{ groupId: String, groupName: String }],
 }, { timestamps: true });
 
 export default mongoose.model('Tenant', tenantSchema);

@@ -5,6 +5,8 @@ import TabEmail    from './tabs/TabEmail';
 import TabPayments from './tabs/TabPayments';
 import TabNotes    from './tabs/TabNotes';
 import TabSecurity from './tabs/TabSecurity';
+import TabGroups   from './tabs/TabGroups';
+import TabAnalysis from './tabs/TabAnalysis';
 
 const BILLING = {
     active:    { label: 'פעיל',   cls: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
@@ -38,6 +40,8 @@ const TABS = [
     { key: 'payments', label: 'תשלומים',  icon: '💳' },
     { key: 'notes',    label: 'תמיכה',    icon: '💬' },
     { key: 'security', label: 'אבטחה',    icon: '🔐' },
+    { key: 'groups',   label: 'קבוצות',   icon: '👥' },
+    { key: 'analysis', label: 'ניתוח AI', icon: '🔍' },
 ];
 
 export default function TenantPanel({ tenant: t, onQR, qrLoading, onReconnect, onDelete, onEdit, onCompose, onEmailSaved }) {
@@ -168,6 +172,8 @@ export default function TenantPanel({ tenant: t, onQR, qrLoading, onReconnect, o
                 {activeTab === 'payments' && <TabPayments tenantId={t._id} />}
                 {activeTab === 'notes'    && <TabNotes    tenantId={t._id} />}
                 {activeTab === 'security' && <TabSecurity tenantId={t._id} tenant={t} />}
+                {activeTab === 'groups'   && <TabGroups   tenant={t} onSaved={onEmailSaved} />}
+                {activeTab === 'analysis' && <TabAnalysis tenant={t} />}
             </div>
         </div>
     );

@@ -1,12 +1,13 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import Tenant from '../models/Tenant.js';
-import { getQR, getAllStatuses, isConnected, sendMessage } from '../services/whatsappManager.js';
+import { getQR, getAllStatuses, isConnected, sendMessage, fetchGroups } from '../services/whatsappManager.js';
 import { startBridge, stopBridge, getBridgeStats, testImapConnection } from '../services/emailBridgeManager.js';
 import { poolAdd, poolRemove, poolUpdateTenant, poolForceWake, getPoolStatus } from '../services/tenantPool.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
 import { invalidateTransporter } from '../services/emailRenderer.js';
 import { audit } from '../utils/audit.js';
+import { exportConversation } from '../services/aiAnalysis.js';
 
 const router = express.Router();
 
@@ -40,6 +41,9 @@ router.get('/', async (req, res) => {
         contractEmail:   t.contractEmail,
         tags:            t.tags,
         internalNotes:   t.internalNotes,
+        // groups
+        groupsEnabled:   t.groupsEnabled,
+        allowedGroups:   t.allowedGroups,
     }));
 
     res.json(result);
@@ -178,6 +182,52 @@ router.delete('/:id', async (req, res) => {
     await audit(req, 'tenant.delete', req.params.id);
     poolRemove(req.params.id);
     await Tenant.findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+});
+
+// ─── ייצוא שיחה ל-JSON ───────────────────────────────────────────
+router.get('/:id/export-conversation', async (req, res) => {
+    const { type, groupId, phone, dateFrom, dateTo } = req.query;
+    if (type === 'group' && !groupId) return res.status(400).json({ error: 'נדרש groupId' });
+    if (type === 'dm'    && !phone)   return res.status(400).json({ error: 'נדרש phone' });
+
+    try {
+        const data = await exportConversation({ tenantId: req.params.id, type, groupId, phone, dateFrom, dateTo });
+        const filename = `conversation_${data.meta.source}_${new Date().toISOString().slice(0,10)}.json`;
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.send(JSON.stringify(data, null, 2));
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── שליפת כל הקבוצות מ-WhatsApp ────────────────────────────────
+router.get('/:id/wa-groups', async (req, res) => {
+    const tenantId = req.params.id;
+    if (!isConnected(tenantId))
+        return res.status(400).json({ error: 'הוואצאפ של לקוח זה לא מחובר כרגע' });
+    try {
+        const groups = await fetchGroups(tenantId);
+        const tenant = await Tenant.findById(tenantId).select('groupsEnabled allowedGroups');
+        res.json({ groups, groupsEnabled: tenant.groupsEnabled, allowedGroups: tenant.allowedGroups });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ─── עדכון הגדרות קבוצות ─────────────────────────────────────────
+router.put('/:id/groups', async (req, res) => {
+    const { groupsEnabled, allowedGroups } = req.body;
+    const update = {};
+    if (groupsEnabled  !== undefined) update.groupsEnabled  = groupsEnabled;
+    if (allowedGroups  !== undefined) update.allowedGroups  = allowedGroups;
+
+    const tenant = await Tenant.findByIdAndUpdate(req.params.id, update, { new: true });
+    if (!tenant) return res.status(404).json({ error: 'לקוח לא נמצא' });
+
+    poolUpdateTenant(req.params.id, tenant);
+    await audit(req, 'tenant.update.groups', req.params.id, { groupsEnabled, count: allowedGroups?.length });
     res.json({ ok: true });
 });
 

@@ -61,6 +61,17 @@ export const sendMessage = async (tenantId, jid, content) => {
     return await inst.sock.sendMessage(jid, content);
 };
 
+export const fetchGroups = async (tenantId) => {
+    const inst = instances.get(tenantId);
+    if (!inst?.sock) throw new Error('לא מחובר');
+    const groups = await inst.sock.groupFetchAllParticipating();
+    return Object.values(groups).map(g => ({
+        groupId:   g.id.replace('@g.us', ''),
+        groupName: g.subject,
+        size:      g.participants?.length ?? 0,
+    }));
+};
+
 export const sendPresence = async (tenantId, jid, type) => {
     const inst = instances.get(tenantId);
     if (!inst?.sock) return;

@@ -103,23 +103,38 @@ const checkForNewEmails = async (tenantId, tenant, bridge) => {
             const subject   = parsed.subject || '';
             let shouldMarkSeen = false;
 
-            if (fromEmail.toLowerCase() === tenant.destinationEmail.toLowerCase() && subject.includes('WA_MSG:')) {
+            const isFromTenant = fromEmail.toLowerCase() === tenant.destinationEmail.toLowerCase();
+            const isWaMsg = subject.includes('WA_MSG:') || subject.includes('WA_GRP:');
+
+            if (isFromTenant && isWaMsg) {
                 if (!isConnected(tenantId)) {
                     console.warn(`[${tenantId}] וואצאפ לא מחובר — ננסה שוב`);
                     processingEmails.delete(`${tenantId}:${uid}`);
                     continue;
                 }
 
-                const match = subject.match(/WA_MSG:\s*([0-9\-\+]+)/);
-                if (match) {
-                    const phone = match[1].trim().replace(/\D/g, '');
-                    const jid   = `${phone}@s.whatsapp.net`;
+                // Detect group vs DM
+                const grpMatch = subject.match(/WA_GRP:\s*([\d\-]+)/);
+                const dmMatch  = subject.match(/WA_MSG:\s*([0-9\-\+]+)/);
+                const match    = grpMatch || dmMatch;
+                const jid      = grpMatch
+                    ? `${grpMatch[1].trim()}@g.us`
+                    : dmMatch
+                        ? `${dmMatch[1].trim().replace(/\D/g, '')}@s.whatsapp.net`
+                        : null;
+
+                if (match && jid) {
+                    const groupId = grpMatch ? grpMatch[1].trim() : null;
+                    const phone   = dmMatch  ? dmMatch[1].trim().replace(/\D/g, '') : (groupId || jid);
 
                     const doSend = async () => {
                         const body = cleanEmailBody(parsed.text, tenant.emailSignature);
                         if (body) {
                             await humanTextSend(tenantId, jid, body);
-                            await Message.create({ tenantId, phone, senderName: 'אני', direction: 'out', text: body });
+                            await Message.create({
+                                tenantId, phone, senderName: 'אני', direction: 'out', text: body,
+                                ...(groupId && { groupJid: groupId }),
+                            });
                         }
                         // שולחים רק קבצים שהמשתמש צירף בעצמו (contentDisposition=attachment)
                         // תמונות inline מגיעות מתבנית ה-HTML ומסוננות החוצה
@@ -135,7 +150,7 @@ const checkForNewEmails = async (tenantId, tenant, bridge) => {
                             else                                           content = { document: att.content, mimetype: att.contentType, fileName: att.filename };
                             await sendMessage(tenantId, jid, content);
                         }
-                        console.log(`[${tenantId}] ✓ uid=${uid} → ${phone}`);
+                        console.log(`[${tenantId}] ✓ uid=${uid} → ${jid}`);
                         const b = bridges.get(tenantId);
                         if (b) { b.stats.emailToWa++; b.stats.lastEmailAt = new Date().toISOString(); }
                     };

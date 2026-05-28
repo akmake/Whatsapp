@@ -7,6 +7,7 @@ import Message from '../models/Message.js';
 import { extractPhone } from './whatsappManager.js';
 import { getMessageText, getMessageType, downloadMedia } from './waMessageUtils.js';
 import { sendEmailToTenant, recordWaToEmail } from './emailBridgeManager.js';
+import { transcribeAudio } from './transcribe.js';
 import { broadcast } from './sseManager.js';
 
 const MEDIA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../media');
@@ -22,16 +23,48 @@ const saveMedia = (tenantId, filename, buffer) => {
     return filePath;
 };
 
+// ─── group name cache (5 min TTL) ───────────────────────────────
+const groupNameCache = new Map();
+const GROUP_CACHE_TTL = 5 * 60 * 1000;
+
+const getGroupName = async (sock, groupJid) => {
+    const cached = groupNameCache.get(groupJid);
+    if (cached && Date.now() - cached.ts < GROUP_CACHE_TTL) return cached.name;
+    try {
+        const meta = await sock.groupMetadata(groupJid);
+        const name = meta.subject || groupJid.replace('@g.us', '');
+        groupNameCache.set(groupJid, { name, ts: Date.now() });
+        return name;
+    } catch {
+        return groupJid.replace('@g.us', '');
+    }
+};
+
 export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     const tenant = await Tenant.findById(tenantId);
     if (!tenant || !tenant.active) return;
 
-    const fromPhone = extractPhone(msg, tenantId);
+    const remoteJid  = msg.key.remoteJid || '';
+    const isGroup    = remoteJid.endsWith('@g.us');
+    const senderJid  = isGroup ? (msg.key.participant || '') : remoteJid;
+
+    const fromPhone = senderJid.replace('@s.whatsapp.net', '').replace(/\D/g, '')
+        || extractPhone(msg, tenantId);
     if (!fromPhone) return;
 
     const senderName = msg.pushName || fromPhone;
-    const text = getMessageText(msg);
-    const msgType = getMessageType(msg);
+    const text       = getMessageText(msg);
+    const msgType    = getMessageType(msg);
+
+    let groupContext = null;
+    if (isGroup) {
+        if (!tenant.groupsEnabled) return;
+        const groupId = remoteJid.replace('@g.us', '');
+        const allowed = tenant.allowedGroups?.some(g => g.groupId === groupId);
+        if (!allowed) return;
+        const groupName = await getGroupName(sock, remoteJid);
+        groupContext = { groupId, groupName };
+    }
 
     let extraText = '';
     let mediaPath = null;
@@ -67,7 +100,9 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
             const buffer = await downloadMedia(msg, sock);
             mediaPath = saveMedia(tenantId, `aud_${Date.now()}_${token()}.ogg`, buffer);
             mediaType = 'audio';
-            extraText = '🎵 הקלטה קולית';
+            const transcript = await transcribeAudio(mediaPath);
+            extraText = transcript || '🎵 הקלטה קולית';
+            if (transcript) console.log(`[${tenantId}] תמלול: "${transcript.slice(0, 60)}..."`);
         } catch (err) {
             console.error(`[${tenantId}] שגיאת הורדת אודיו:`, err.message);
             extraText = '🎵 הקלטה קולית';
@@ -105,18 +140,49 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
         }).join('\n\n');
     }
 
+    if (msgType === 'locationMessage') {
+        const loc = msg.message.locationMessage;
+        const lat  = loc.degreesLatitude;
+        const lng  = loc.degreesLongitude;
+        const name = loc.name || loc.address || '';
+        const url  = `https://maps.google.com/maps?q=${lat},${lng}`;
+        extraText = `📍 מיקום${name ? `: ${name}` : ''}\n${url}`;
+    }
+
+    if (msgType === 'stickerMessage') {
+        try {
+            const buffer = await downloadMedia(msg, sock);
+            mediaPath = saveMedia(tenantId, `stk_${Date.now()}_${token()}.webp`, buffer);
+            mediaType = 'image';
+            extraText = '🎭 סטיקר';
+        } catch (err) {
+            console.error(`[${tenantId}] שגיאת הורדת סטיקר:`, err.message);
+            extraText = '🎭 סטיקר';
+        }
+    }
+
+    if (msgType === 'reactionMessage') {
+        const emoji = msg.message.reactionMessage?.text;
+        if (!emoji) return; // הסרת תגובה — מתעלמים
+        extraText = `${emoji} תגובה להודעה`;
+    }
+
     const finalText = [text, extraText].filter(Boolean).join('\n');
     if (!finalText && !mediaPath) return;
 
     await Message.create({
-        tenantId, phone: fromPhone, senderName, direction: 'in',
+        tenantId,
+        phone: fromPhone,
+        senderName,
+        direction: 'in',
         text: finalText || '',
         mediaPath,
         mediaType,
+        ...(groupContext && { groupJid: groupContext.groupId, groupName: groupContext.groupName }),
     });
 
-    await sendEmailToTenant(tenant, tenantId, fromPhone, senderName, finalText);
+    await sendEmailToTenant(tenant, tenantId, fromPhone, senderName, finalText, groupContext);
     recordWaToEmail(tenantId);
     broadcast('message');
-    console.log(`[${tenantId}] הודעה מ-${fromPhone} הועברה למייל`);
+    console.log(`[${tenantId}] הודעה מ-${fromPhone}${groupContext ? ` [${groupContext.groupName}]` : ''} הועברה למייל`);
 };
