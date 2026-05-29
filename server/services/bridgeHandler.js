@@ -40,16 +40,18 @@ const getGroupName = async (sock, groupJid) => {
     }
 };
 
-export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
+export const handleIncomingWAMessage = async (tenantId, msg, sock, { isHistory = false } = {}) => {
     const tenant = await Tenant.findById(tenantId);
     if (!tenant || !tenant.active) return;
 
     const remoteJid  = msg.key.remoteJid || '';
     const isGroup    = remoteJid.endsWith('@g.us');
-    const senderJid  = isGroup ? (msg.key.participant || '') : remoteJid;
+    const senderJid  = isGroup ? (msg.key.participant || msg.participant || '') : remoteJid;
+    if (isHistory) console.log(`[${tenantId}][history] remoteJid=${remoteJid} isGroup=${isGroup} participant=${msg.key.participant || msg.participant}`);
 
     const fromPhone = senderJid.replace('@s.whatsapp.net', '').replace(/\D/g, '')
-        || extractPhone(msg, tenantId);
+        || extractPhone(msg, tenantId)
+        || (isGroup ? 'unknown' : '');
     if (!fromPhone) return;
 
     const senderName = msg.pushName || fromPhone;
@@ -59,8 +61,8 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     let groupContext = null;
     if (isGroup) {
         if (!tenant.groupsEnabled) return;
-        const groupId = remoteJid.replace('@g.us', '');
-        const allowed = tenant.allowedGroups?.some(g => g.groupId === groupId);
+        const groupId = remoteJid.replace('@g.us', '').replace(/:\d+$/, '');
+        const allowed = tenant.allowedGroups?.some(g => g.groupId.replace(/:\d+$/, '') === groupId);
         if (!allowed) return;
         const groupName = await getGroupName(sock, remoteJid);
         groupContext = { groupId, groupName };
@@ -170,19 +172,26 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     const finalText = [text, extraText].filter(Boolean).join('\n');
     if (!finalText && !mediaPath) return;
 
-    await Message.create({
-        tenantId,
-        phone: fromPhone,
-        senderName,
-        direction: 'in',
-        text: finalText || '',
-        mediaPath,
-        mediaType,
-        ...(groupContext && { groupJid: groupContext.groupId, groupName: groupContext.groupName }),
-    });
+    const msgTimestamp = msg.messageTimestamp
+        ? new Date(Number(msg.messageTimestamp) * 1000)
+        : new Date();
+
+    const msgId = msg.key?.id || null;
+    await Message.findOneAndUpdate(
+        { tenantId, msgId: msgId || `${fromPhone}_${msgTimestamp.getTime()}` },
+        { $setOnInsert: {
+            tenantId, phone: fromPhone, senderName, direction: 'in',
+            text: finalText || '', mediaPath, mediaType, createdAt: msgTimestamp,
+            msgId: msgId || null,
+            ...(groupContext && { groupJid: groupContext.groupId, groupName: groupContext.groupName }),
+        }},
+        { upsert: true, new: false }
+    );
+
+    broadcast('message');
+    if (isHistory) return;
 
     await sendEmailToTenant(tenant, tenantId, fromPhone, senderName, finalText, groupContext);
     recordWaToEmail(tenantId);
-    broadcast('message');
     console.log(`[${tenantId}] הודעה מ-${fromPhone}${groupContext ? ` [${groupContext.groupName}]` : ''} הועברה למייל`);
 };

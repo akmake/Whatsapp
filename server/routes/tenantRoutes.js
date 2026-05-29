@@ -1,6 +1,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import Tenant from '../models/Tenant.js';
+import Message from '../models/Message.js';
 import { getQR, getAllStatuses, isConnected, sendMessage, fetchGroups } from '../services/whatsappManager.js';
 import { startBridge, stopBridge, getBridgeStats, testImapConnection } from '../services/emailBridgeManager.js';
 import { poolAdd, poolRemove, poolUpdateTenant, poolForceWake, getPoolStatus } from '../services/tenantPool.js';
@@ -198,7 +199,8 @@ router.get('/:id/export-conversation', async (req, res) => {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.send(JSON.stringify(data, null, 2));
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        const status = e.message.includes('לא נמצאו') ? 404 : 500;
+        res.status(status).json({ error: e.message });
     }
 });
 
@@ -229,6 +231,21 @@ router.put('/:id/groups', async (req, res) => {
     poolUpdateTenant(req.params.id, tenant);
     await audit(req, 'tenant.update.groups', req.params.id, { groupsEnabled, count: allowedGroups?.length });
     res.json({ ok: true });
+});
+
+// ─── שליפת הודעות קבוצה ──────────────────────────────────────────
+router.get('/:id/messages', async (req, res) => {
+    const { groupJid, limit = 100 } = req.query;
+    if (!groupJid) return res.status(400).json({ error: 'נדרש groupJid' });
+    try {
+        const messages = await Message.find({ tenantId: req.params.id, groupJid })
+            .sort({ createdAt: -1 })
+            .limit(parseInt(limit))
+            .lean();
+        res.json(messages.reverse());
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // ─── חיבור מחדש ───────────────────────────────────────────────────

@@ -4,10 +4,11 @@ export const exportConversation = async ({ tenantId, type, groupId, phone, dateF
     const from = dateFrom ? new Date(dateFrom) : (() => { const d = new Date(); d.setDate(d.getDate() - 7); return d; })();
     const to   = dateTo   ? new Date(dateTo)   : new Date();
 
+    const normalizedGroupId = groupId ? groupId.replace(/:\d+$/, '') : groupId;
     const query = {
         tenantId,
         createdAt: { $gte: from, $lte: to },
-        ...(type === 'group' ? { groupJid: groupId } : { phone, groupJid: null }),
+        ...(type === 'group' ? { groupJid: normalizedGroupId } : { phone, groupJid: null }),
     };
 
     const messages = await Message.find(query).sort({ createdAt: 1 }).lean();

@@ -240,6 +240,7 @@ export const startTenant = async (tenantId, onMessage) => {
         connectTimeoutMs: 60_000,
         emitOwnEvents: false,
         markOnlineOnConnect: true,
+        syncFullHistory: true,
         getMessage: async () => ({ conversation: '' }),
     });
 
@@ -298,6 +299,21 @@ export const startTenant = async (tenantId, onMessage) => {
                 inst.reconnectAttempts++;
                 inst.reconnectLock = false;
                 scheduleReconnect(tenantId, `close_${code}`);
+            }
+        }
+    });
+
+    sock.ev.on('messaging-history.set', async ({ messages: histMsgs, isLatest }) => {
+        touch(inst);
+        console.log(`[${tenantId}] סנכרון היסטוריה: ${histMsgs.length} הודעות (isLatest=${isLatest})`);
+        for (const m of histMsgs) {
+            if (!m.message || m.key.fromMe || m.key.remoteJid === 'status@broadcast') continue;
+            if (inst.msgCache.get(m.key.id)) continue;
+            inst.msgCache.set(m.key.id, true);
+            try {
+                await onMessage(tenantId, m, sock, { isHistory: true });
+            } catch (err) {
+                console.error(`[${tenantId}] שגיאה בהיסטוריה:`, err.message);
             }
         }
     });
