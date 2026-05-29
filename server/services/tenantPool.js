@@ -1,4 +1,4 @@
-import { startTenant, sleepTenant, waitForConnected } from './whatsappManager.js';
+import { startTenant, sleepTenant, waitForConnected, isHistorySyncing } from './whatsappManager.js';
 import { startBridge, stopBridge } from './emailBridgeManager.js';
 import { handleIncomingWAMessage } from './bridgeHandler.js';
 import { logger } from '../utils/logger.js';
@@ -52,6 +52,17 @@ const runCycle = async (tenantId) => {
             console.warn(`[pool] ${tenantId} לא התחבר תוך 30ש׳ — מדלג`);
         }
         await wait(SYNC_WINDOW);
+
+        // אם history sync פעיל — ממתינים עד לסיום (מקסימום 10 דקות)
+        if (isHistorySyncing(tenantId)) {
+            console.log(`[pool] ⏳ ${tenantId} מסנכרן היסטוריה — מחכה לסיום`);
+            const HISTORY_TIMEOUT = 10 * 60 * 1000;
+            const started = Date.now();
+            while (isHistorySyncing(tenantId) && Date.now() - started < HISTORY_TIMEOUT) {
+                await wait(3000);
+            }
+            console.log(`[pool] ✅ ${tenantId} סנכרון היסטוריה הסתיים — ממשיך`);
+        }
     } catch (err) {
         console.error(`[pool] שגיאה ${tenantId}:`, err.message);
         logger.error('pool', `cycle error: ${err.message}`, { tenantId, stack: err.stack });

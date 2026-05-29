@@ -45,7 +45,8 @@ const getReconnectDelay = (attempts) => {
 
 // ─── exports ─────────────────────────────────────────────────
 
-export const getStatus = (tenantId) => instances.get(tenantId)?.status ?? 'disconnected';
+export const getStatus        = (tenantId) => instances.get(tenantId)?.status ?? 'disconnected';
+export const isHistorySyncing = (tenantId) => instances.get(tenantId)?.historySyncing ?? false;
 export const getQR     = (tenantId) => instances.get(tenantId)?.qr ?? null;
 export const isConnected = (tenantId) => {
     const inst = instances.get(tenantId);
@@ -218,6 +219,7 @@ export const startTenant = async (tenantId, onMessage) => {
         heartbeatInterval: null,
         lastEventTimestamp: Date.now(),
         lidToPhone, // LID → phone JID mapping (loaded from session files)
+        historySyncing: false, // true while messaging-history.set batches are arriving
         stats: {
             msgsReceived: 0, msgsSent: 0, reconnectCount: 0,
             connectedAt: null, lastMsgAt: null, lastMsgDirection: null,
@@ -305,6 +307,7 @@ export const startTenant = async (tenantId, onMessage) => {
 
     sock.ev.on('messaging-history.set', async ({ messages: histMsgs, isLatest }) => {
         touch(inst);
+        inst.historySyncing = true;
         console.log(`[${tenantId}] סנכרון היסטוריה: ${histMsgs.length} הודעות (isLatest=${isLatest})`);
         for (const m of histMsgs) {
             if (!m.message || m.key.fromMe || m.key.remoteJid === 'status@broadcast') continue;
@@ -315,6 +318,10 @@ export const startTenant = async (tenantId, onMessage) => {
             } catch (err) {
                 console.error(`[${tenantId}] שגיאה בהיסטוריה:`, err.message);
             }
+        }
+        if (isLatest) {
+            inst.historySyncing = false;
+            console.log(`[${tenantId}] ✅ סנכרון היסטוריה הושלם`);
         }
     });
 
