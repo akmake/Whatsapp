@@ -175,7 +175,7 @@ export default function TenantPanel({ tenant: t, onQR, qrLoading, onReconnect, o
                 {activeTab === 'notes'     && <TabNotes     tenantId={t._id} />}
                 {activeTab === 'security'  && <TabSecurity  tenantId={t._id} tenant={t} />}
                 {activeTab === 'groups'    && <TabGroups    tenant={t} onSaved={onEmailSaved} />}
-                {activeTab === 'groupchat' && <TabGroupChat tenant={t} />}
+                {activeTab === 'groupchat' && <TabGroupChat tenant={t} onResetSession={onQR} />}
                 {activeTab === 'analysis'  && <TabAnalysis  tenant={t} />}
             </div>
         </div>

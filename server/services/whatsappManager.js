@@ -385,6 +385,14 @@ export const stopTenant = (tenantId) => {
     console.log(`[${tenantId}] עצור`);
 };
 
+// מחיקת session — יגרום ל-QR חדש בחיבור הבא + history sync מלא
+export const resetSession = (tenantId) => {
+    stopTenant(tenantId);
+    const sessionDir = getSessionDir(tenantId);
+    try { fs.rmSync(sessionDir, { recursive: true, force: true }); } catch (e) { /* ok */ }
+    console.log(`[${tenantId}] session נמחק`);
+};
+
 // ניתוק עדין בלי מחיקת session — לשימוש הקונבייר
 export const sleepTenant = (tenantId) => {
     const inst = instances.get(tenantId);

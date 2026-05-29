@@ -103,13 +103,43 @@ function EmptyState({ hasGroups }) {
     );
 }
 
-export default function TabGroupChat({ tenant }) {
+function ResetSessionDialog({ tenantName, onConfirm, onCancel, loading }) {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4 text-right">
+                <div className="text-3xl mb-3 text-center">⚠️</div>
+                <h2 className="text-lg font-bold text-slate-800 mb-2">איפוס סשן WhatsApp</h2>
+                <p className="text-sm text-slate-600 mb-1">
+                    פעולה זו תמחק את הסשן הנוכחי של <strong>{tenantName}</strong>.
+                </p>
+                <p className="text-sm text-slate-600 mb-4">
+                    המשתמש יצטרך לסרוק QR חדש, ולאחר מכן המערכת תסנכרן את ההיסטוריה המלאה של הקבוצה (עד 3 חודשים אחורה).
+                </p>
+                <div className="flex gap-3 justify-end">
+                    <button onClick={onCancel} disabled={loading}
+                        className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 border border-slate-200 rounded-lg transition disabled:opacity-40">
+                        ביטול
+                    </button>
+                    <button onClick={onConfirm} disabled={loading}
+                        className="px-4 py-2 text-sm font-semibold text-white bg-red-500 hover:bg-red-600 rounded-lg transition disabled:opacity-50 flex items-center gap-2">
+                        {loading && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                        {loading ? 'מאפס...' : 'אפס סשן'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default function TabGroupChat({ tenant, onResetSession }) {
     const groups = tenant.allowedGroups ?? [];
-    const [selected, setSelected]   = useState(groups[0] ?? null);
-    const [messages, setMessages]   = useState([]);
-    const [loading, setLoading]     = useState(false);
-    const bottomRef                 = useRef(null);
-    const prevGroupRef              = useRef(null);
+    const [selected, setSelected]       = useState(groups[0] ?? null);
+    const [messages, setMessages]       = useState([]);
+    const [loading, setLoading]         = useState(false);
+    const [showReset, setShowReset]     = useState(false);
+    const [resetLoading, setResetLoading] = useState(false);
+    const bottomRef                     = useRef(null);
+    const prevGroupRef                  = useRef(null);
 
     const fetchMessages = async (group) => {
         if (!group) return;
@@ -135,6 +165,17 @@ export default function TabGroupChat({ tenant }) {
         }
     }, [selected]);
 
+    const handleReset = async () => {
+        setResetLoading(true);
+        try {
+            await api.post(`/tenants/${tenant._id}/reset-session`);
+            setShowReset(false);
+            if (onResetSession) onResetSession();
+        } finally {
+            setResetLoading(false);
+        }
+    };
+
     // SSE — refetch on new message
     useSSE(() => {
         if (selected) fetchMessages(selected);
@@ -146,6 +187,15 @@ export default function TabGroupChat({ tenant }) {
     }, [messages]);
 
     return (
+        <>
+        {showReset && (
+            <ResetSessionDialog
+                tenantName={tenant.name}
+                onConfirm={handleReset}
+                onCancel={() => setShowReset(false)}
+                loading={resetLoading}
+            />
+        )}
         <div className="flex h-full" style={{ background: '#111b21' }}>
 
             {/* ── Groups sidebar ──────────────────────────────── */}
@@ -201,7 +251,7 @@ export default function TabGroupChat({ tenant }) {
                                 <p className="text-white font-semibold text-sm">{selected.groupName}</p>
                                 <p className="text-white/40 text-xs">{messages.length} הודעות</p>
                             </div>
-                            <div className="ml-auto">
+                            <div className="ml-auto flex items-center gap-3">
                                 <button
                                     onClick={() => fetchMessages(selected)}
                                     className="text-white/50 hover:text-white/90 transition text-xs flex items-center gap-1"
@@ -211,6 +261,17 @@ export default function TabGroupChat({ tenant }) {
                                             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                     </svg>
                                     רענן
+                                </button>
+                                <button
+                                    onClick={() => setShowReset(true)}
+                                    title="איפוס סשן — יביא היסטוריה מלאה"
+                                    className="text-amber-400/70 hover:text-amber-300 transition text-xs flex items-center gap-1"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                    </svg>
+                                    טען היסטוריה
                                 </button>
                             </div>
                         </div>
@@ -262,5 +323,6 @@ export default function TabGroupChat({ tenant }) {
                 )}
             </div>
         </div>
+        </>
     );
 }

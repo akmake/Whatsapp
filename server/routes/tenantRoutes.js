@@ -2,7 +2,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import Tenant from '../models/Tenant.js';
 import Message from '../models/Message.js';
-import { getQR, getAllStatuses, isConnected, sendMessage, fetchGroups } from '../services/whatsappManager.js';
+import { getQR, getAllStatuses, isConnected, sendMessage, fetchGroups, resetSession } from '../services/whatsappManager.js';
 import { startBridge, stopBridge, getBridgeStats, testImapConnection } from '../services/emailBridgeManager.js';
 import { poolAdd, poolRemove, poolUpdateTenant, poolForceWake, getPoolStatus } from '../services/tenantPool.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
@@ -252,6 +252,16 @@ router.get('/:id/messages', async (req, res) => {
 router.post('/:id/reconnect', async (req, res) => {
     const tenant = await Tenant.findById(req.params.id);
     if (!tenant) return res.status(404).json({ error: 'לקוח לא נמצא' });
+    poolForceWake(req.params.id);
+    res.json({ ok: true });
+});
+
+// ─── איפוס session (מחיקה + QR חדש + history sync מלא) ──────────
+router.post('/:id/reset-session', async (req, res) => {
+    const tenant = await Tenant.findById(req.params.id);
+    if (!tenant) return res.status(404).json({ error: 'לקוח לא נמצא' });
+    resetSession(req.params.id);
+    await audit(req, 'tenant.reset.session', req.params.id);
     poolForceWake(req.params.id);
     res.json({ ok: true });
 });
