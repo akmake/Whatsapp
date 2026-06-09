@@ -1,53 +1,63 @@
-import { pipeline } from '@xenova/transformers';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import ffmpeg from 'fluent-ffmpeg';
-import fs from 'fs';
-import os from 'os';
+// לקוח דק ל-transcribeWorker: שולח עבודות תמלול ל-worker thread ייעודי
+// ומחזיר Promise לכל עבודה. ה-inference הכבד רץ מחוץ ל-event loop הראשי,
+// כך שתמלול הקלטה אחת לא חוסם עיבוד הודעות נכנסות אחרות.
+import { Worker } from 'worker_threads';
 import path from 'path';
-import { randomBytes } from 'crypto';
+import { fileURLToPath } from 'url';
 
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+const WORKER_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'transcribeWorker.js');
 
-let _transcriber = null;
+let _worker = null;
+let _seq = 0;
+const pending = new Map(); // id → { resolve }
 
-const getTranscriber = async () => {
-    if (!_transcriber) {
-        console.log('[Whisper] טוען מודל (פעם ראשונה — עשוי לקחת כמה שניות)...');
-        _transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-small', {
-            quantized: true,
-        });
-        console.log('[Whisper] מודל מוכן');
-    }
-    return _transcriber;
+const rejectAll = (reason) => {
+    for (const [, { resolve }] of pending) resolve(null); // נכשל בעדינות — מחזיר null
+    pending.clear();
 };
 
-const toWav = (inputPath) =>
-    new Promise((resolve, reject) => {
-        const outPath = path.join(os.tmpdir(), `wa_${randomBytes(6).toString('hex')}.wav`);
-        ffmpeg(inputPath)
-            .audioChannels(1)
-            .audioFrequency(16000)
-            .format('wav')
-            .on('end', () => resolve(outPath))
-            .on('error', reject)
-            .save(outPath);
+const getWorker = () => {
+    if (_worker) return _worker;
+
+    console.log('[Whisper] מפעיל worker thread לתמלול...');
+    _worker = new Worker(WORKER_PATH);
+
+    _worker.on('message', ({ id, text, error }) => {
+        const entry = pending.get(id);
+        if (!entry) return;
+        pending.delete(id);
+        if (error) {
+            console.error('[Whisper] transcription failed:', error);
+            entry.resolve(null);
+        } else {
+            entry.resolve(text);
+        }
     });
 
-export const transcribeAudio = async (filePath) => {
-    let wavPath = null;
-    try {
-        wavPath = await toWav(filePath);
-        const transcriber = await getTranscriber();
-        const result = await transcriber(wavPath, {
-            language: 'hebrew',
-            task: 'transcribe',
-            chunk_length_s: 30,
-        });
-        return result.text?.trim() || null;
-    } catch (err) {
-        console.error('[Whisper] transcription failed:', err.message);
-        return null;
-    } finally {
-        if (wavPath) try { fs.unlinkSync(wavPath); } catch (_) {}
-    }
+    _worker.on('error', (err) => {
+        console.error('[Whisper] worker error:', err.message);
+        rejectAll(err);
+        _worker = null; // ייווצר מחדש בעבודה הבאה
+    });
+
+    _worker.on('exit', (code) => {
+        if (code !== 0) console.error(`[Whisper] worker יצא עם קוד ${code}`);
+        rejectAll(new Error(`worker exit ${code}`));
+        _worker = null;
+    });
+
+    return _worker;
 };
+
+export const transcribeAudio = (filePath) =>
+    new Promise((resolve) => {
+        const id = ++_seq;
+        pending.set(id, { resolve });
+        try {
+            getWorker().postMessage({ id, filePath });
+        } catch (err) {
+            pending.delete(id);
+            console.error('[Whisper] לא ניתן לשלוח עבודה ל-worker:', err.message);
+            resolve(null);
+        }
+    });

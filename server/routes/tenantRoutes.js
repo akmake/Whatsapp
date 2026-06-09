@@ -256,7 +256,7 @@ router.post('/:id/reconnect', async (req, res) => {
     res.json({ ok: true });
 });
 
-// ─── איפוס session (מחיקה + QR חדש + history sync מלא) ──────────
+// ─── איפוס session (מחיקת session + QR חדש לחיבור מחדש) ──────────
 router.post('/:id/reset-session', async (req, res) => {
     const tenant = await Tenant.findById(req.params.id);
     if (!tenant) return res.status(404).json({ error: 'לקוח לא נמצא' });

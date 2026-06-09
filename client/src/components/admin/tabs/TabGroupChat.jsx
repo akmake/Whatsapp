@@ -113,7 +113,8 @@ function ResetSessionDialog({ tenantName, onConfirm, onCancel, loading }) {
                     פעולה זו תמחק את הסשן הנוכחי של <strong>{tenantName}</strong>.
                 </p>
                 <p className="text-sm text-slate-600 mb-4">
-                    המשתמש יצטרך לסרוק QR חדש, ולאחר מכן המערכת תסנכרן את ההיסטוריה המלאה של הקבוצה (עד 3 חודשים אחורה).
+                    המשתמש יצטרך לסרוק QR חדש כדי להתחבר מחדש. הודעות שהתקבלו עד כה יישמרו;
+                    מהחיבור החדש ואילך ייקלטו רק הודעות חדשות.
                 </p>
                 <div className="flex gap-3 justify-end">
                     <button onClick={onCancel} disabled={loading}
@@ -264,14 +265,14 @@ export default function TabGroupChat({ tenant, onResetSession }) {
                                 </button>
                                 <button
                                     onClick={() => setShowReset(true)}
-                                    title="איפוס סשן — יביא היסטוריה מלאה"
+                                    title="איפוס סשן — מחיקת החיבור וסריקת QR חדש"
                                     className="text-amber-400/70 hover:text-amber-300 transition text-xs flex items-center gap-1"
                                 >
                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                                             d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
                                     </svg>
-                                    טען היסטוריה
+                                    אפס סשן
                                 </button>
                             </div>
                         </div>

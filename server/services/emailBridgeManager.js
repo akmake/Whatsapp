@@ -8,6 +8,24 @@ import { logger } from '../utils/logger.js';
 
 export { sendEmailToTenant } from './emailRenderer.js';
 
+// ─── קונפיג IMAP מרוכז ──────────────────────────────────────────
+const IMAP_HOST = 'imap.gmail.com';
+const IMAP_PORT = 993;
+
+// rejectUnauthorized:true — מאמת את תעודת ה-TLS של השרת.
+// קריטי: בלעדיו סיסמת המייל של הלקוח חשופה למתקפת MITM.
+const buildImapConfig = (user, password, authTimeout) => ({
+    imap: {
+        user,
+        password,
+        host: IMAP_HOST,
+        port: IMAP_PORT,
+        tls: true,
+        authTimeout,
+        tlsOptions: { servername: IMAP_HOST, rejectUnauthorized: true },
+    },
+});
+
 let _queueSend = null;
 export const registerQueueSend = (fn) => { _queueSend = fn; };
 
@@ -223,17 +241,7 @@ export const startBridge = async (tenantId, tenant) => {
     try {
         console.log(`[${tenantId}] מתחבר ל-IMAP...`);
         connection = await withTimeout(
-            imap.connect({
-                imap: {
-                    user: tenant.bridgeEmail,
-                    password: decrypt(tenant.bridgeEmailPassword),
-                    host: 'imap.gmail.com',
-                    port: 993,
-                    tls: true,
-                    authTimeout: 30000,
-                    tlsOptions: { rejectUnauthorized: false },
-                },
-            }),
+            imap.connect(buildImapConfig(tenant.bridgeEmail, decrypt(tenant.bridgeEmailPassword), 30000)),
             35000, 'imap-connect'
         );
         await withTimeout(connection.openBox('INBOX'), 10000, 'imap-openBox');
@@ -326,10 +334,7 @@ export const testImapConnection = async (email, password) => {
     let connection;
     const attempt = new Promise(async (resolve) => {
         try {
-            connection = await imap.connect({
-                imap: { user: email, password, host: 'imap.gmail.com', port: 993,
-                        tls: true, authTimeout: 10000, tlsOptions: { rejectUnauthorized: false } },
-            });
+            connection = await imap.connect(buildImapConfig(email, password, 10000));
             await connection.openBox('INBOX');
             resolve({ ok: true });
         } catch (err) {

@@ -40,14 +40,13 @@ const getGroupName = async (sock, groupJid) => {
     }
 };
 
-export const handleIncomingWAMessage = async (tenantId, msg, sock, { isHistory = false } = {}) => {
+export const handleIncomingWAMessage = async (tenantId, msg, sock) => {
     const tenant = await Tenant.findById(tenantId);
     if (!tenant || !tenant.active) return;
 
     const remoteJid  = msg.key.remoteJid || '';
     const isGroup    = remoteJid.endsWith('@g.us');
     const senderJid  = isGroup ? (msg.key.participant || msg.participant || '') : remoteJid;
-    if (isHistory) console.log(`[${tenantId}][history] remoteJid=${remoteJid} isGroup=${isGroup} participant=${msg.key.participant || msg.participant}`);
 
     const fromPhone = senderJid.replace('@s.whatsapp.net', '').replace(/\D/g, '')
         || extractPhone(msg, tenantId)
@@ -189,7 +188,6 @@ export const handleIncomingWAMessage = async (tenantId, msg, sock, { isHistory =
     );
 
     broadcast('message');
-    if (isHistory) return;
 
     await sendEmailToTenant(tenant, tenantId, fromPhone, senderName, finalText, groupContext);
     recordWaToEmail(tenantId);

@@ -8,12 +8,23 @@ const getKey = () => {
     return Buffer.from(hex, 'hex');
 };
 
+// נקרא בהפעלת השרת — נכשל מהר אם המפתח חסר/לא תקין, כדי שלעולם
+// לא נשמור סיסמאות לקוחות ללא הצפנה.
+export const assertEncryptionKey = () => {
+    if (!getKey()) {
+        throw new Error(
+            'ENCRYPTION_KEY חסר או לא תקין — נדרשים 64 תווי hex (32 בתים). ' +
+            'צור מפתח: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+        );
+    }
+};
+
 export const encrypt = (text) => {
     if (!text) return text;
     const key = getKey();
     if (!key) {
-        console.warn('[crypto] ENCRYPTION_KEY חסר — סיסמה נשמרת ללא הצפנה');
-        return text;
+        // לעולם לא שומרים plaintext — עדיף להיכשל בקול רם
+        throw new Error('[crypto] ENCRYPTION_KEY חסר — לא ניתן להצפין סיסמה');
     }
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv(ALGO, key, iv);

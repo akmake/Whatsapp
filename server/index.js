@@ -24,8 +24,18 @@ import { poolAdd, startConveyor, poolQueueSend } from './services/tenantPool.js'
 import { registerQueueSend } from './services/emailBridgeManager.js';
 import { startMediaCleanup } from './services/mediaCleanup.js';
 import { startHealthMonitor, getHealthSnapshot } from './services/healthMonitor.js';
+import { assertEncryptionKey } from './utils/crypto.js';
 
 dotenv.config();
+
+// ─── fail-fast: סודות חובה ────────────────────────────────────────
+try {
+    assertEncryptionKey();
+} catch (err) {
+    console.error('[startup]', err.message);
+    logger.fatal('startup', err.message);
+    process.exit(1);
+}
 
 // ─── crash handlers ───────────────────────────────────────────────
 
@@ -46,15 +56,6 @@ process.on('SIGTERM', () => {
 });
 
 const app = express();
-
-// ─── DB + logger MongoDB sink ─────────────────────────────────────
-
-connectDB().then(() => {
-    // לאחר חיבור DB — מאפשרים כתיבה ל-MongoDB
-    setMongoSink(entry =>
-        LogEntry.create({ ...entry, ts: new Date(entry.ts) })
-    );
-}).catch(() => {});
 
 logger.info('server', 'starting up', { pid: process.pid });
 
@@ -108,23 +109,40 @@ app.all('*', (req, res, next) => {
 app.use(globalErrorHandler);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, async () => {
-  logger.info('server', `listening on port ${PORT}`);
-  console.log(`Server running on port ${PORT}`);
 
-  try {
-    registerQueueSend(poolQueueSend);
-    startMediaCleanup();
-    startHealthMonitor();
-    const tenants = await Tenant.find({ active: true });
-    logger.info('server', `loading ${tenants.length} tenants into pool`);
-    console.log(`טוען ${tenants.length} לקוחות לפול...`);
-    for (const tenant of tenants) {
-      poolAdd(tenant._id.toString(), tenant);
+// ─── אתחול: DB → האזנה → טעינת לקוחות לפול ──────────────────────
+const start = async () => {
+  // 1. חיבור DB חוסם — אסור להאזין/לטעון לקוחות לפני שיש DB
+  await connectDB();
+  setMongoSink(entry =>
+    LogEntry.create({ ...entry, ts: new Date(entry.ts) })
+  );
+
+  // 2. רק עכשיו מתחילים להאזין
+  app.listen(PORT, async () => {
+    logger.info('server', `listening on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
+
+    try {
+      registerQueueSend(poolQueueSend);
+      startMediaCleanup();
+      startHealthMonitor();
+      const tenants = await Tenant.find({ active: true });
+      logger.info('server', `loading ${tenants.length} tenants into pool`);
+      console.log(`טוען ${tenants.length} לקוחות לפול...`);
+      for (const tenant of tenants) {
+        poolAdd(tenant._id.toString(), tenant);
+      }
+      startConveyor();
+    } catch (err) {
+      logger.error('server', `init error: ${err.message}`, { stack: err.stack });
+      console.error('שגיאה באתחול לקוחות:', err.message);
     }
-    startConveyor();
-  } catch (err) {
-    logger.error('server', `init error: ${err.message}`, { stack: err.stack });
-    console.error('שגיאה באתחול לקוחות:', err.message);
-  }
+  });
+};
+
+start().catch((err) => {
+  logger.fatal('startup', `failed to start: ${err.message}`, { stack: err.stack });
+  console.error('[startup] נכשל:', err.message);
+  process.exit(1);
 });
