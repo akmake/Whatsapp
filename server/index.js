@@ -18,7 +18,10 @@ import noteRoutes from './routes/noteRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
 import logRoutes from './routes/logRoutes.js';
 import mediaRoutes from './routes/mediaRoutes.js';
+import btbRoutes from './routes/btbRoutes.js';
 import Tenant from './models/Tenant.js';
+import BtbAccount from './models/BtbAccount.js';
+import * as statusManager from './services/statusManager.js';
 import LogEntry from './models/LogEntry.js';
 import { poolAdd, startConveyor, poolQueueSend } from './services/tenantPool.js';
 import { registerQueueSend } from './services/emailBridgeManager.js';
@@ -101,6 +104,7 @@ app.use('/api/tenants/:id/notes',    protect, noteRoutes);
 app.use('/api/audit',                protect, auditRoutes);
 app.use('/api/logs',                          logRoutes);
 app.use('/api/media',                         mediaRoutes);
+app.use('/api/btb',                  protect, btbRoutes);
 
 app.all('*', (req, res, next) => {
   next(new AppError(`Can't find ${req.originalUrl} on this server!`, 404));
@@ -134,6 +138,16 @@ const start = async () => {
         poolAdd(tenant._id.toString(), tenant);
       }
       startConveyor();
+
+      // BTB — חשבונות סטטוסים: נשארים מחוברים (מחוץ ל-pool) לתפיסת צפיות
+      const btbAccounts = await BtbAccount.find({ active: true });
+      logger.info('server', `connecting ${btbAccounts.length} BTB accounts`);
+      console.log(`מחבר ${btbAccounts.length} חשבונות BTB...`);
+      for (const acc of btbAccounts) {
+        statusManager.connect(acc._id.toString()).catch(err =>
+          logger.error('btb', `connect failed: ${err.message}`, { accountId: acc._id.toString() })
+        );
+      }
     } catch (err) {
       logger.error('server', `init error: ${err.message}`, { stack: err.stack });
       console.error('שגיאה באתחול לקוחות:', err.message);

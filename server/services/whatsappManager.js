@@ -154,7 +154,10 @@ const scheduleReconnect = (tenantId, reason) => {
     console.log(`[${tenantId}] 🔄 reconnect #${inst.reconnectAttempts + 1} בעוד ${Math.round(delay / 1000)}ש׳ (${reason})`);
     inst.stats.reconnectCount++;
     setTimeout(() => {
-        if (!noReconnect.has(tenantId)) startTenant(tenantId, inst.onMessage);
+        if (!noReconnect.has(tenantId)) startTenant(tenantId, inst.onMessage, {
+            onStatusPost: inst.onStatusPost,
+            onStatusReceipt: inst.onStatusReceipt,
+        });
     }, delay);
 };
 
@@ -181,7 +184,9 @@ const forceReconnect = async (tenantId, reason) => {
 
 // ─── main ────────────────────────────────────────────────────
 
-export const startTenant = async (tenantId, onMessage) => {
+// opts (אופציונלי, ל-BTB): { onStatusPost(tenantId, m), onStatusReceipt(tenantId, view) }
+// כש-opts לא מסופק — ההתנהגות זהה לחלוטין ל-WTM.
+export const startTenant = async (tenantId, onMessage, opts = {}) => {
     const existing = instances.get(tenantId);
     if (existing) {
         if (existing.reconnectLock) return;
@@ -213,6 +218,9 @@ export const startTenant = async (tenantId, onMessage) => {
     const inst = {
         sock: null, qr: null, status: 'connecting',
         msgCache, onMessage,
+        // BTB hooks (אופציונלי) — נשמרים בין reconnect-ים
+        onStatusPost:    opts.onStatusPost    ?? existing?.onStatusPost    ?? null,
+        onStatusReceipt: opts.onStatusReceipt ?? existing?.onStatusReceipt ?? null,
         reconnectLock: false,
         reconnectAttempts: existing?.reconnectAttempts ?? 0,
         heartbeatInterval: null,
@@ -305,9 +313,17 @@ export const startTenant = async (tenantId, onMessage) => {
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         touch(inst);
-        if (type !== 'notify') return;
         for (const m of messages) {
-            if (!m.message || m.key.fromMe || m.key.remoteJid === 'status@broadcast') continue;
+            // BTB: סטטוס שעלה (מהטלפון או מאיתנו) — מטופל ללא תלות ב-type
+            if (m.key.remoteJid === 'status@broadcast') {
+                if (m.key.fromMe && m.message && inst.onStatusPost) {
+                    try { await inst.onStatusPost(tenantId, m); }
+                    catch (err) { console.error(`[${tenantId}] status post hook:`, err.message); }
+                }
+                continue;
+            }
+            if (type !== 'notify') continue;
+            if (!m.message || m.key.fromMe) continue;
             if (inst.msgCache.get(m.key.id)) continue;
             inst.msgCache.set(m.key.id, true);
             try {
@@ -340,7 +356,31 @@ export const startTenant = async (tenantId, onMessage) => {
     });
 
     sock.ev.on('messages.update',       () => touch(inst));
-    sock.ev.on('message-receipt.update',() => touch(inst));
+
+    // BTB: אישורי צפייה בסטטוס => תיעוד צופים. ל-WTM (ללא hook) רק touch.
+    sock.ev.on('message-receipt.update', async (updates) => {
+        touch(inst);
+        if (!inst.onStatusReceipt) return;
+        for (const u of updates) {
+            if (u?.key?.remoteJid !== 'status@broadcast' || !u.key.fromMe) continue;
+            const r = u.receipt || {};
+            const viewerJid = r.userJid;
+            if (!viewerJid) continue;
+            // רק צפייה ממשית (read/played), לא אישור מסירה בלבד
+            const tsRaw = r.playedTimestamp || r.readTimestamp;
+            if (!tsRaw) continue;
+            try {
+                await inst.onStatusReceipt(tenantId, {
+                    msgId: u.key.id,
+                    viewerJid,
+                    viewedAt: new Date(Number(tsRaw) * 1000),
+                    receiptType: r.playedTimestamp ? 'played' : 'read',
+                });
+            } catch (err) { console.error(`[${tenantId}] status receipt hook:`, err.message); }
+        }
+    });
+
+
     sock.ev.on('presence.update',       () => touch(inst));
     sock.ev.on('chats.update',          () => touch(inst));
     sock.ev.on('contacts.update',       () => touch(inst));

@@ -19,7 +19,7 @@ export default function LoginPage() {
     const success = await login(email, password);
     
     if (success) {
-      navigate('/admin'); // אם הצליח -> כנס לדלת האחורית
+      navigate('/'); // אם הצליח -> מסך בחירת השירות
     } else {
       setStatus('error');
     }

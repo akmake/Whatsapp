@@ -1,8 +1,11 @@
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import path from 'path';
 import mongoose from 'mongoose';
 import User from '../models/User.js';
 
-dotenv.config({ path: new URL('../.env', import.meta.url).pathname });
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const email = process.argv[2];
 const password = process.argv[3];
