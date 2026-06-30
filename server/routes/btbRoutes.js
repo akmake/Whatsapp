@@ -136,19 +136,10 @@ router.get('/:id/statuses/:statusId/viewers', async (req, res) => {
     .sort({ viewedAt: -1 })
     .lean();
 
-  res.json(viewers.map(v => ({
-    viewerJid: v.viewerJid,
-    phone: v.viewerPhone,
-    name: v.viewerName,
-    viewedAt: v.viewedAt,
-    receiptType: v.receiptType,
-  })));
-});
-
-// ─── זיהוי מחדש של צופים ללא טלפון (LID שלא היה ממופה) ────────────
-router.post('/:id/resolve-viewers', async (req, res) => {
-  const result = await statusManager.resolveUnknownViewers(req.params.id);
-  res.json(result);
+  res.json(viewers.map(v => {
+    const { phone, name } = statusManager.resolveViewer(req.params.id, v.viewerJid);
+    return { viewerJid: v.viewerJid, phone, name, viewedAt: v.viewedAt, receiptType: v.receiptType };
+  }));
 });
 
 // ─── דירוג צופים (גרעין העוקבים) ─────────────────────────────────
@@ -160,18 +151,23 @@ router.get('/:id/top-viewers', async (req, res) => {
     { $match: { accountId } },
     { $group: {
         _id: '$viewerJid',
-        phone: { $first: '$viewerPhone' },
-        name: { $first: '$viewerName' },
         statusesViewed: { $sum: 1 },          // ייחודי לכל סטטוס => זו ספירת סטטוסים שונים
         firstViewedAt: { $min: '$viewedAt' },
         lastViewedAt: { $max: '$viewedAt' },
     } },
     { $sort: { statusesViewed: -1, lastViewedAt: -1 } },
     { $limit: limit },
-    { $project: { _id: 0, viewerJid: '$_id', phone: 1, name: 1, statusesViewed: 1, firstViewedAt: 1, lastViewedAt: 1 } },
   ]);
 
-  res.json(viewers);
+  // פתרון טלפון+שם בזמן אמת ממיפויי החיבור (לא מהנתון השמור)
+  res.json(viewers.map(v => {
+    const { phone, name } = statusManager.resolveViewer(req.params.id, v._id);
+    return {
+      viewerJid: v._id, phone, name,
+      statusesViewed: v.statusesViewed,
+      firstViewedAt: v.firstViewedAt, lastViewedAt: v.lastViewedAt,
+    };
+  }));
 });
 
 export default router;

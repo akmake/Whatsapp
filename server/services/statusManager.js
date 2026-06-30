@@ -7,6 +7,7 @@ import {
   stopTenant,
   resetSession,
   resolvePhone,
+  resolveContact,
   getStatus as waGetStatus,
   getQR as waGetQR,
   isConnected as waIsConnected,
@@ -120,24 +121,11 @@ async function onStatusReceipt(waTenantId, view) {
 
 // ─── lifecycle ────────────────────────────────────────────────────
 
-// ניסיון לזהות צופים שנשמרו ללא טלפון (lid שלא היה ממופה בזמן הצפייה).
-// מיפוי ה-LID מתעשר עם הזמן (contacts.upsert + קבצי session), אז כדאי לנסות שוב.
-export async function resolveUnknownViewers(accountId) {
-  const unknown = await StatusView.find({ accountId, viewerPhone: '' }).select('_id viewerJid');
-  let resolved = 0;
-  for (const v of unknown) {
-    const phone = resolvePhone(waId(accountId), v.viewerJid);
-    if (phone) {
-      await StatusView.updateOne({ _id: v._id }, { $set: { viewerPhone: phone } });
-      resolved++;
-    }
-  }
-  if (resolved) broadcast('btb_status');
-  return { checked: unknown.length, resolved };
-}
+// פתרון בזמן אמת של צופה => { phone, name } מתוך מיפויי ה-instance.
+export const resolveViewer = (accountId, jid) => resolveContact(waId(accountId), jid);
 
 export const connect = (accountId) =>
-  startTenant(waId(accountId), async () => {}, { onStatusPost, onStatusReceipt });
+  startTenant(waId(accountId), async () => {}, { onStatusPost, onStatusReceipt, emitOwnEvents: true });
 
 export const disconnect = (accountId) => stopTenant(waId(accountId));
 export const reset      = (accountId) => resetSession(waId(accountId));

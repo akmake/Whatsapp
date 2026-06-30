@@ -116,7 +116,6 @@ export default function BtbPage() {
     const [qrImg, setQrImg]       = useState(null);
     const [selStatus, setSelStatus] = useState(null);
     const [selViewers, setSelViewers] = useState(null);
-    const [resolving, setResolving]   = useState(false);
 
     const fetchAccounts = useCallback(async () => {
         const res = await api.get('/btb');
@@ -164,16 +163,6 @@ export default function BtbPage() {
         setSelStatus(s); setSelViewers(null);
         try { setSelViewers((await api.get(`/btb/${activeId}/statuses/${s._id}/viewers`)).data); }
         catch { setSelViewers([]); }
-    };
-
-    const resolveViewers = async () => {
-        setResolving(true);
-        try {
-            const res = await api.post(`/btb/${activeId}/resolve-viewers`);
-            await fetchDetail(activeId);
-            alert(`זוהו ${res.data.resolved} מתוך ${res.data.checked} צופים שלא היו מזוהים`);
-        } catch { alert('שגיאה בזיהוי'); }
-        finally { setResolving(false); }
     };
 
     if (accounts === null) return (
@@ -226,13 +215,7 @@ export default function BtbPage() {
                     </div>}
 
                 {/* core followers */}
-                <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-semibold text-gray-500">גרעין העוקבים <span className="font-normal text-gray-400">(לפי כמות סטטוסים שנצפו)</span></h2>
-                    <button onClick={resolveViewers} disabled={resolving}
-                        className="text-xs font-medium px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50">
-                        {resolving ? 'מזהה…' : '🔄 זהה צופים לא מזוהים'}
-                    </button>
-                </div>
+                <h2 className="text-sm font-semibold text-gray-500 mb-3">גרעין העוקבים <span className="font-normal text-gray-400">(לפי כמות סטטוסים שנצפו)</span></h2>
                 <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50">
                     {viewers.length === 0 && <p className="p-4 text-sm text-gray-400 text-center">עדיין אין צפיות מתועדות.</p>}
                     {viewers.map((v, i) => (

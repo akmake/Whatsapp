@@ -36,6 +36,17 @@ const getSessionDir = (tenantId) => path.join(SESSIONS_DIR, tenantId);
 
 const touch = (inst) => { inst.lastEventTimestamp = Date.now(); };
 
+// שומר שם איש קשר + מיפוי LID מתוך אובייקט contact של Baileys
+const storeContact = (inst, c) => {
+    if (!c) return;
+    const name = c.name || c.notify || c.verifiedName || '';
+    if (c.id && name) inst.contactName[c.id] = name;
+    if (c.lid) {
+        if (c.id) inst.lidToPhone[c.lid] = c.id;
+        if (name) inst.contactName[c.lid] = name;
+    }
+};
+
 const getReconnectDelay = (attempts) => {
     const exp = BASE_RECONNECT_DELAY * Math.pow(2, attempts);
     const max = 5 * 60 * 1000;
@@ -106,6 +117,16 @@ export const resolvePhone = (tenantId, rawJid = '') => {
     return jid.replace('@s.whatsapp.net', '').replace(/\D/g, '');
 };
 
+// מחזיר { phone, name } עבור jid כלשהו — נפתר בזמן אמת ממיפויי ה-instance.
+export const resolveContact = (tenantId, rawJid = '') => {
+    const jid = rawJid.replace(/:\d+@/, '@');
+    const inst = instances.get(tenantId);
+    const phone = resolvePhone(tenantId, jid);
+    let name = inst?.contactName?.[jid] || '';
+    if (!name && phone) name = inst?.contactName?.[`${phone}@s.whatsapp.net`] || '';
+    return { phone, name };
+};
+
 // ─── heartbeat ───────────────────────────────────────────────
 
 const stopHeartbeat = (inst) => {
@@ -163,6 +184,7 @@ const scheduleReconnect = (tenantId, reason) => {
         if (!noReconnect.has(tenantId)) startTenant(tenantId, inst.onMessage, {
             onStatusPost: inst.onStatusPost,
             onStatusReceipt: inst.onStatusReceipt,
+            emitOwnEvents: inst.emitOwnEvents,
         });
     }, delay);
 };
@@ -227,11 +249,13 @@ export const startTenant = async (tenantId, onMessage, opts = {}) => {
         // BTB hooks (אופציונלי) — נשמרים בין reconnect-ים
         onStatusPost:    opts.onStatusPost    ?? existing?.onStatusPost    ?? null,
         onStatusReceipt: opts.onStatusReceipt ?? existing?.onStatusReceipt ?? null,
+        emitOwnEvents:   opts.emitOwnEvents   ?? existing?.emitOwnEvents   ?? false,
         reconnectLock: false,
         reconnectAttempts: existing?.reconnectAttempts ?? 0,
         heartbeatInterval: null,
         lastEventTimestamp: Date.now(),
         lidToPhone, // LID → phone JID mapping (loaded from session files)
+        contactName: existing?.contactName ?? {}, // jid → שם איש קשר (שם שמור / pushName)
         stats: {
             msgsReceived: 0, msgsSent: 0, reconnectCount: 0,
             connectedAt: null, lastMsgAt: null, lastMsgDirection: null,
@@ -252,7 +276,7 @@ export const startTenant = async (tenantId, onMessage, opts = {}) => {
         keepAliveIntervalMs: 30_000,
         retryRequestDelayMs: 2_000,
         connectTimeoutMs: 60_000,
-        emitOwnEvents: false,
+        emitOwnEvents: inst.emitOwnEvents, // BTB=true (צריך את הסטטוסים שלך), WTM=false
         markOnlineOnConnect: true,
         syncFullHistory: false, // מתייחסים רק להודעות מתחילת החיבור — ללא סנכרון היסטוריה
         getMessage: async () => ({ conversation: '' }),
@@ -343,11 +367,11 @@ export const startTenant = async (tenantId, onMessage, opts = {}) => {
         }
     });
 
-    sock.ev.on('contacts.upsert', (contacts) => {
+    const handleContacts = (contacts) => {
         touch(inst);
-        for (const c of contacts) {
+        for (const c of contacts || []) {
+            storeContact(inst, c);
             if (c.lid && c.id) {
-                inst.lidToPhone[c.lid] = c.id;
                 // Persist to disk so mapping survives sleep/restart
                 const phone = c.id.replace('@s.whatsapp.net', '');
                 const lid   = c.lid.replace('@lid', '');
@@ -359,6 +383,14 @@ export const startTenant = async (tenantId, onMessage, opts = {}) => {
                 } catch (e) {}
             }
         }
+    };
+    sock.ev.on('contacts.upsert', handleContacts);
+    sock.ev.on('contacts.update', handleContacts);
+
+    // סנכרון ראשוני (גם כש-syncFullHistory=false) מביא את רשימת אנשי הקשר => שמות
+    sock.ev.on('messaging-history.set', ({ contacts }) => {
+        touch(inst);
+        for (const c of contacts || []) storeContact(inst, c);
     });
 
     sock.ev.on('messages.update',       () => touch(inst));
@@ -389,7 +421,6 @@ export const startTenant = async (tenantId, onMessage, opts = {}) => {
 
     sock.ev.on('presence.update',       () => touch(inst));
     sock.ev.on('chats.update',          () => touch(inst));
-    sock.ev.on('contacts.update',       () => touch(inst));
 };
 
 export const waitForConnected = (tenantId, timeoutMs = 30_000) =>
