@@ -67,7 +67,7 @@ fun UploadScreen(onDone: () -> Unit, vm: UploadViewModel = hiltViewModel()) {
                 Box(
                     Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
                         .background(if (active) Color.White else Color.Transparent)
-                        .clickable { vm.setType(id) }.padding(vertical = 8.dp),
+                        .clickable { vm.updateType(id) }.padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(label, color = if (active) Ink else Muted, fontSize = 14.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)

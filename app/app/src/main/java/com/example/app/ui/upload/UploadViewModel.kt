@@ -32,7 +32,7 @@ class UploadViewModel @Inject constructor(
     var error by mutableStateOf<String?>(null)
     var doneCount by mutableStateOf<Int?>(null)
 
-    fun setType(t: String) {
+    fun updateType(t: String) {
         type = t
         if (t == "text") { uri = null; fileName = null }
     }
