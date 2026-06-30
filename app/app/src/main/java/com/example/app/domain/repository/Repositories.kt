@@ -26,6 +26,8 @@ interface BtbRepository {
         id: String,
         type: String,
         caption: String,
+        bgColor: String,
+        font: Int,
         bytes: ByteArray?,
         fileName: String?,
         mime: String?,

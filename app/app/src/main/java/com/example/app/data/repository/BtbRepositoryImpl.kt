@@ -65,6 +65,8 @@ class BtbRepositoryImpl @Inject constructor(
         id: String,
         type: String,
         caption: String,
+        bgColor: String,
+        font: Int,
         bytes: ByteArray?,
         fileName: String?,
         mime: String?,
@@ -73,12 +75,13 @@ class BtbRepositoryImpl @Inject constructor(
             val text = "text/plain".toMediaTypeOrNull()
             val typeBody = type.toRequestBody(text)
             val captionBody = caption.toRequestBody(text)
-            val bgBody = "".toRequestBody(text)
+            val bgBody = bgColor.toRequestBody(text)
+            val fontBody = font.toString().toRequestBody(text)
             val filePart = bytes?.let {
                 val body = it.toRequestBody((mime ?: "application/octet-stream").toMediaTypeOrNull(), 0, it.size)
                 MultipartBody.Part.createFormData("file", fileName ?: "upload", body)
             }
-            val start = api.uploadStatus(id, typeBody, captionBody, bgBody, filePart)
+            val start = api.uploadStatus(id, typeBody, captionBody, bgBody, fontBody, filePart)
             val jobId = start.jobId ?: return Result.failure(Exception("לא התקבל מזהה עבודה מהשרת"))
 
             val deadline = System.currentTimeMillis() + 600_000 // עד 10 דקות לוידאו כבד

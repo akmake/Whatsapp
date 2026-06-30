@@ -28,13 +28,19 @@ class UploadViewModel @Inject constructor(
     var uri by mutableStateOf<Uri?>(null)
     var fileName by mutableStateOf<String?>(null)
     var caption by mutableStateOf("")
+    var bgColor by mutableStateOf("#0B6B45")
+    var font by mutableStateOf(0)
     var uploading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var doneCount by mutableStateOf<Int?>(null)
 
     fun updateType(t: String) {
+        if (type != t) {
+            uri = null
+            fileName = null
+            error = null
+        }
         type = t
-        if (t == "text") { uri = null; fileName = null }
     }
 
     fun setFile(u: Uri?) {
@@ -65,7 +71,7 @@ class UploadViewModel @Inject constructor(
                 if (bytes == null) { error = "לא ניתן לקרוא את הקובץ"; uploading = false; return@launch }
             }
 
-            val res = btbRepo.uploadAndAwait(accountId, type, caption, bytes, fileName, mime)
+            val res = btbRepo.uploadAndAwait(accountId, type, caption, bgColor, font, bytes, fileName, mime)
             uploading = false
             res.onSuccess { doneCount = it }.onFailure { error = it.message ?: "ההעלאה נכשלה" }
         }

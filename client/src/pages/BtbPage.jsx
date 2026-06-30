@@ -59,6 +59,11 @@ function ProbeReport({ probe }) {
             ['רזולוציה', p => (p?.video?.width && p?.video?.height) ? `${p.video.width}×${p.video.height}` : null],
             ['FPS',      p => fmtFps(p?.video?.fps)],
             ['Bitrate',  p => p?.video?.bitrate || p?.totalBitrate],
+            ['עומק/פיקסל', p => [p?.video?.pixFmt, p?.video?.bitsPerRawSample ? `${p.video.bitsPerRawSample}-bit` : null].filter(Boolean).join(' · ') || null],
+            ['Transfer', p => p?.video?.colorTransfer],
+            ['Primaries', p => p?.video?.colorPrimaries],
+            ['מרחב/טווח', p => [p?.video?.colorSpace, p?.video?.colorRange].filter(Boolean).join(' · ') || null],
+            ['HDR',       p => p?.video?.hdr === true ? 'כן' : (p?.video?.hdr === false ? 'לא' : null)],
             ['משך',      p => p?.durationSec ? `${p.durationSec.toFixed(1)}s` : null],
         ];
     const cell = (val, stageKey) => val || (stageKey === 'roundtrip' ? '…' : '—');
