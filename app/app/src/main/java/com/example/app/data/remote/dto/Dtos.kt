@@ -55,6 +55,42 @@ data class StatusDto(
     val thumbnail: String?,
     val bgColor: String?,
     val viewsCount: Int?,
+    val mediaProbe: MediaProbeDto?,
+)
+
+data class MediaProbeDto(
+    val original: MediaSpecDto?,
+    val sent: MediaSpecDto?,
+    val roundtrip: MediaSpecDto?,
+    val originalBytes: Long?,
+    val sentBytes: Long?,
+    val roundtripBytes: Long?,
+)
+
+data class MediaSpecDto(
+    val kind: String?,
+    val format: String?,
+    val width: Int?,
+    val height: Int?,
+    val durationSec: Double?,
+    val totalBitrate: String?,
+    val video: VideoSpecDto?,
+)
+
+data class VideoSpecDto(
+    val codec: String?,
+    val profile: String?,
+    val width: Int?,
+    val height: Int?,
+    val pixFmt: String?,
+    val fps: String?,
+    val bitrate: String?,
+    val colorRange: String?,
+    val colorSpace: String?,
+    val colorTransfer: String?,
+    val colorPrimaries: String?,
+    val bitsPerRawSample: Any?,
+    val hdr: Boolean?,
 )
 
 data class ViewerDto(

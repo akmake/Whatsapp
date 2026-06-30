@@ -34,6 +34,7 @@ import com.example.app.ui.theme.*
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 private enum class MainTab { Home, Statuses, Audience }
 
@@ -45,6 +46,12 @@ fun DashboardScreen(onUpload: () -> Unit, vm: DashboardViewModel = hiltViewModel
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) vm.refresh() }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(10_000)
+            vm.refresh()
+        }
     }
 
     Scaffold(

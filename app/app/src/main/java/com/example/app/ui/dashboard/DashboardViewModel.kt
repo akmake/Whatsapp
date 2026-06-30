@@ -13,6 +13,9 @@ import com.example.app.domain.repository.AuthRepository
 import com.example.app.domain.repository.BtbRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Job
 import javax.inject.Inject
 
 @HiltViewModel
@@ -22,6 +25,7 @@ class DashboardViewModel @Inject constructor(
 ) : ViewModel() {
 
     private var accountId: String? = null
+    private var refreshJob: Job? = null
 
     var account by mutableStateOf<Account?>(null); private set
     var stats by mutableStateOf<Stats?>(null); private set
@@ -34,7 +38,8 @@ class DashboardViewModel @Inject constructor(
     var selViewers by mutableStateOf<List<Viewer>?>(null); private set
 
     fun refresh() {
-        viewModelScope.launch {
+        if (refreshJob?.isActive == true) return
+        refreshJob = viewModelScope.launch {
             if (accountId.isNullOrBlank()) accountId = authRepo.savedAccountId()
             val id = accountId
             if (id.isNullOrBlank()) {
@@ -43,10 +48,19 @@ class DashboardViewModel @Inject constructor(
                 return@launch
             }
             try {
-                account = btbRepo.account(id)
-                stats = btbRepo.stats(id)
-                statuses = btbRepo.statuses(id)
-                followers = btbRepo.topViewers(id)
+                coroutineScope {
+                    val accountCall = async { btbRepo.account(id) }
+                    val statsCall = async { btbRepo.stats(id) }
+                    val statusesCall = async { btbRepo.statuses(id) }
+                    val followersCall = async { btbRepo.topViewers(id) }
+                    account = accountCall.await()
+                    stats = statsCall.await()
+                    statuses = statusesCall.await()
+                    followers = followersCall.await()
+                }
+                selStatus?.let { selected ->
+                    selStatus = statuses.firstOrNull { it.id == selected.id } ?: selected
+                }
                 error = null
             } catch (e: Exception) {
                 error = "שגיאה בטעינת הנתונים — משוך לרענון"

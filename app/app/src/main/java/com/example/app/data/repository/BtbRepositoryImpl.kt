@@ -2,8 +2,11 @@ package com.example.app.data.repository
 
 import com.example.app.data.remote.ApiService
 import com.example.app.domain.model.Account
+import com.example.app.domain.model.MediaProbe
+import com.example.app.domain.model.MediaSpec
 import com.example.app.domain.model.Stats
 import com.example.app.domain.model.StatusItem
+import com.example.app.domain.model.VideoSpec
 import com.example.app.domain.model.Viewer
 import com.example.app.domain.repository.BtbRepository
 import kotlinx.coroutines.delay
@@ -52,6 +55,12 @@ class BtbRepositoryImpl @Inject constructor(
                 thumbnail = it.thumbnail.orEmpty(),
                 bgColor = it.bgColor.orEmpty(),
                 viewsCount = it.viewsCount ?: 0,
+                mediaProbe = it.mediaProbe?.let { p ->
+                    MediaProbe(
+                        original = p.original?.toModel(), sent = p.sent?.toModel(), roundtrip = p.roundtrip?.toModel(),
+                        originalBytes = p.originalBytes, sentBytes = p.sentBytes, roundtripBytes = p.roundtripBytes,
+                    )
+                },
             )
         }
 
@@ -110,4 +119,18 @@ private fun com.example.app.data.remote.dto.ViewerDto.toViewer() = Viewer(
     pushName = pushName,
     viewedAt = viewedAt,
     statusesViewed = statusesViewed,
+)
+
+private fun com.example.app.data.remote.dto.MediaSpecDto.toModel() = MediaSpec(
+    kind = kind.orEmpty(), format = format, width = width, height = height,
+    durationSec = durationSec, totalBitrate = totalBitrate,
+    video = video?.let { v ->
+        VideoSpec(
+            codec = v.codec, profile = v.profile, width = v.width, height = v.height,
+            pixFmt = v.pixFmt, fps = v.fps, bitrate = v.bitrate,
+            colorRange = v.colorRange, colorSpace = v.colorSpace,
+            colorTransfer = v.colorTransfer, colorPrimaries = v.colorPrimaries,
+            bitsPerRawSample = v.bitsPerRawSample?.toString(), hdr = v.hdr,
+        )
+    },
 )
