@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import api from '@/services/api';
 import { useSSE } from '@/hooks/useSSE';
 import Modal from '@/components/ui/Modal';
@@ -89,66 +90,6 @@ function ProbeReport({ probe }) {
     );
 }
 
-// ─── טופס יצירת חשבון לקוח (שם עסק + טלפון + פרטי כניסה) ───────────
-function CreateAccount({ onCreated, onClose }) {
-    const [name, setName]   = useState('');
-    const [phone, setPhone] = useState('');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [busy, setBusy]   = useState(false);
-
-    const submit = async (e) => {
-        e.preventDefault();
-        if (!name || !phone) return;
-        setBusy(true);
-        try {
-            const res = await api.post('/btb', { name, phone, email: email.trim(), password });
-            onCreated(res.data._id);
-        } catch (err) {
-            alert(err.response?.data?.error || 'שגיאה ביצירת חשבון');
-        } finally { setBusy(false); }
-    };
-
-    const form = (
-        <form onSubmit={submit} className="w-full">
-            <h2 className="text-lg font-bold text-[#111b21] mb-1">לקוח חדש</h2>
-            <p className="text-sm text-gray-500 mb-5">צור חשבון ופרטי כניסה ללקוח. אחרי היצירה תחבר את הוואטסאפ שלו ב-QR.</p>
-
-            <label className="block text-sm font-medium text-[#111b21] mb-1">שם העסק</label>
-            <input value={name} onChange={e => setName(e.target.value)}
-                className="w-full mb-4 px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200" />
-
-            <label className="block text-sm font-medium text-[#111b21] mb-1">מספר טלפון</label>
-            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="9725XXXXXXXX" dir="ltr"
-                className="w-full mb-4 px-3 py-2 rounded-lg border border-gray-200 text-right focus:outline-none focus:ring-2 focus:ring-blue-200" />
-
-            <div className="border-t border-gray-100 pt-4 mt-1">
-                <p className="text-xs font-semibold text-gray-400 mb-2">פרטי כניסה ללקוח (אופציונלי — אפשר להוסיף אחר כך)</p>
-                <label className="block text-sm font-medium text-[#111b21] mb-1">אימייל</label>
-                <input value={email} onChange={e => setEmail(e.target.value)} type="email" dir="ltr" placeholder="client@example.com"
-                    className="w-full mb-4 px-3 py-2 rounded-lg border border-gray-200 text-right focus:outline-none focus:ring-2 focus:ring-blue-200" />
-                <label className="block text-sm font-medium text-[#111b21] mb-1">סיסמה (לפחות 8 תווים)</label>
-                <input value={password} onChange={e => setPassword(e.target.value)} type="text" dir="ltr"
-                    className="w-full mb-5 px-3 py-2 rounded-lg border border-gray-200 text-right focus:outline-none focus:ring-2 focus:ring-blue-200" />
-            </div>
-
-            <button type="submit" disabled={busy}
-                className="w-full py-2.5 rounded-lg text-white font-semibold transition disabled:opacity-50"
-                style={{ backgroundColor: BTB.color }}>
-                {busy ? 'יוצר…' : 'צור לקוח'}
-            </button>
-        </form>
-    );
-
-    // מצב מודאל (הוספת לקוח כשכבר יש חשבונות) מול מסך מלא (אין עדיין חשבונות)
-    if (onClose) return <Modal onClose={onClose}>{form}</Modal>;
-    return (
-        <div className="h-full flex items-center justify-center bg-gray-50 px-6">
-            <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-100 p-7">{form}</div>
-        </div>
-    );
-}
-
 // ─── כרטיס מדד ────────────────────────────────────────────────────
 function Metric({ label, value, sub }) {
     return (
@@ -187,66 +128,66 @@ function StatusCard({ s, onClick }) {
     );
 }
 
-// ─── הדף הראשי ────────────────────────────────────────────────────
+// ─── דשבורד של חשבון בודד — משמש גם את הלקוח (הכניסה שלו) וגם את ─────
+// המנהל (drill-in מתוך קונסולת הלקוחות). admin מקבל ניהול חיבור + back.
 export default function BtbPage() {
     const user   = useAuthStore(s => s.user);
     const logout = useAuthStore(s => s.logout);
     const isClient = user?.role === 'client';
     const isAdmin  = !isClient;
 
-    const [accounts, setAccounts] = useState(null);
-    const [activeId, setActiveId] = useState(null);
-    const [showCreate, setShowCreate] = useState(false);
+    const params = useParams();
+    const navigate = useNavigate();
+    const accountId = isClient ? user?.btbAccountId : params.id;
+
+    const [account, setAccount]   = useState(undefined); // undefined=טוען, null=לא נמצא
     const [stats, setStats]       = useState(null);
     const [statuses, setStatuses] = useState([]);
     const [viewers, setViewers]   = useState([]);
     const [qrOpen, setQrOpen]     = useState(false);
     const [qrImg, setQrImg]       = useState(null);
-    const [selStatus, setSelStatus] = useState(null);
+    const [selStatus, setSelStatus]   = useState(null);
     const [selViewers, setSelViewers] = useState(null);
     const [showUpload, setShowUpload] = useState(false);
-    const [test, setTest] = useState(null); // { busy } | { result } | { error }
+    const [test, setTest] = useState(null);
     const testInput = useRef(null);
 
-    const fetchAccounts = useCallback(async () => {
-        const res = await api.get('/btb');
-        setAccounts(res.data);
-        setActiveId(prev => prev || res.data[0]?._id || null);
-    }, []);
+    const fetchMeta = useCallback(async () => {
+        if (!accountId) return;
+        try { setAccount((await api.get(`/btb/${accountId}`)).data); }
+        catch { setAccount(null); }
+    }, [accountId]);
 
-    const fetchDetail = useCallback(async (id) => {
-        if (!id) return;
-        const [s, st, v] = await Promise.all([
-            api.get(`/btb/${id}/stats`),
-            api.get(`/btb/${id}/statuses?limit=50`),
-            api.get(`/btb/${id}/top-viewers?limit=100`),
-        ]);
-        setStats(s.data); setStatuses(st.data); setViewers(v.data);
-    }, []);
+    const fetchDetail = useCallback(async () => {
+        if (!accountId) return;
+        try {
+            const [s, st, v] = await Promise.all([
+                api.get(`/btb/${accountId}/stats`),
+                api.get(`/btb/${accountId}/statuses?limit=50`),
+                api.get(`/btb/${accountId}/top-viewers?limit=100`),
+            ]);
+            setStats(s.data); setStatuses(st.data); setViewers(v.data);
+        } catch { /* ה-SSE/ריענון הבא ינסה שוב */ }
+    }, [accountId]);
 
-    useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
-    useEffect(() => { fetchDetail(activeId); }, [activeId, fetchDetail]);
-    useSSE(() => { fetchAccounts(); fetchDetail(activeId); });
+    useEffect(() => { fetchMeta(); fetchDetail(); }, [fetchMeta, fetchDetail]);
+    useSSE(() => { fetchMeta(); fetchDetail(); });
 
-    // כשהרשימה מתרעננת (למשל אחרי שבדיקת ה-roundtrip חזרה ב-SSE) — מסנכרנים את
-    // הסטטוס הפתוח במודאל כדי שדוח האיכות יתעדכן בלי לסגור/לפתוח.
+    // שמירה על סנכרון הסטטוס הפתוח במודאל כשהרשימה מתרעננת (דוח איכות מ-SSE)
     useEffect(() => {
         setSelStatus(prev => prev ? (statuses.find(s => s._id === prev._id) || prev) : prev);
     }, [statuses]);
 
-    const account = accounts?.find(a => a._id === activeId);
-
     const pollQR = useCallback(async () => {
         try {
-            const res = await api.get(`/btb/${activeId}/qr`);
-            if (res.data.connected) { setQrOpen(false); fetchAccounts(); }
+            const res = await api.get(`/btb/${accountId}/qr`);
+            if (res.data.connected) { setQrOpen(false); fetchMeta(); }
             else if (res.data.qr) setQrImg(res.data.qr);
         } catch { /* ה-interval ינסה שוב */ }
-    }, [activeId, fetchAccounts]);
+    }, [accountId, fetchMeta]);
 
     const openQR = () => { setQrImg(null); setQrOpen(true); pollQR(); };
 
-    // ריענון ה-QR כל עוד המודאל פתוח (וואטסאפ מחליף קוד כל ~20ש'); סגירה אוטומטית בחיבור
     useEffect(() => {
         if (!qrOpen) return;
         if (account?.waStatus === 'connected') { setQrOpen(false); return; }
@@ -254,27 +195,24 @@ export default function BtbPage() {
         return () => clearInterval(iv);
     }, [qrOpen, account?.waStatus, pollQR]);
 
-    const reconnect = async () => { await api.post(`/btb/${activeId}/reconnect`); fetchAccounts(); };
+    const reconnect = async () => { await api.post(`/btb/${accountId}/reconnect`); fetchMeta(); };
 
-    // בדיקת איכות: בוחר קובץ → השרת מעלה→מוריד→מוחק ברקע, והלקוח סוקר תוצאה.
     const runTest = async (e) => {
         const file = e.target.files?.[0];
-        e.target.value = ''; // לאפשר בחירה חוזרת של אותו קובץ
+        e.target.value = '';
         if (!file) return;
         const type = file.type.startsWith('video') ? 'video' : 'image';
-        const accId = activeId;
         setTest({ busy: true, type });
         try {
             const fd = new FormData();
             fd.append('file', file);
             fd.append('type', type);
-            const { data } = await api.post(`/btb/${accId}/status-test`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+            const { data } = await api.post(`/btb/${accountId}/status-test`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
             const testId = data.testId;
-            // סקירה כל 2ש' עד שהעבודה מסתיימת (עד ~3 דקות)
             const deadline = Date.now() + 180_000;
             while (Date.now() < deadline) {
                 await new Promise(r => setTimeout(r, 2000));
-                const job = (await api.get(`/btb/${accId}/status-test/${testId}`)).data;
+                const job = (await api.get(`/btb/${accountId}/status-test/${testId}`)).data;
                 if (job.status === 'done')  { setTest({ result: job.result }); return; }
                 if (job.status === 'error') { setTest({ error: job.error }); return; }
                 if (job.status === 'notfound') { setTest({ error: 'הבדיקה אבדה (השרת אותחל?)' }); return; }
@@ -287,40 +225,43 @@ export default function BtbPage() {
 
     const openViewers = async (s) => {
         setSelStatus(s); setSelViewers(null);
-        try { setSelViewers((await api.get(`/btb/${activeId}/statuses/${s._id}/viewers`)).data); }
+        try { setSelViewers((await api.get(`/btb/${accountId}/statuses/${s._id}/viewers`)).data); }
         catch { setSelViewers([]); }
     };
 
-    if (accounts === null) return (
-        <div className="h-full flex items-center justify-center text-gray-400 bg-gray-50">טוען…</div>
-    );
-    // לקוח בלי חשבון משויך — לא אמור לקרות, אבל ליתר ביטחון
-    if (accounts.length === 0 && isClient) return (
+    // לקוח בלי חשבון משויך
+    if (isClient && !accountId) return (
         <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-500 bg-gray-50 px-6 text-center">
             <p>החשבון שלך עדיין לא הוגדר. פנה למנהל המערכת.</p>
             <button onClick={logout} className="text-sm text-gray-400 hover:text-[#111b21]">התנתק</button>
         </div>
     );
-    if (accounts.length === 0) return <CreateAccount onCreated={(id) => { setActiveId(id); fetchAccounts(); }} />;
+    if (account === undefined) return (
+        <div className="h-full flex items-center justify-center text-gray-400 bg-gray-50">טוען…</div>
+    );
+    if (account === null) return (
+        <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-500 bg-gray-50 px-6 text-center">
+            <p>החשבון לא נמצא.</p>
+            {isAdmin && <button onClick={() => navigate('/btb')} className="text-sm" style={{ color: BTB.color }}>← חזרה ללקוחות</button>}
+        </div>
+    );
 
     const badge = WA_BADGE[account?.waStatus] || WA_BADGE.disconnected;
-    const target = stats?.targetFollowers || 1000;
+    const target = stats?.targetFollowers || account?.targetFollowers || 1000;
     const pct = stats ? Math.min(100, Math.round((stats.uniqueViewers / target) * 100)) : 0;
 
     return (
         <div className="h-full overflow-auto bg-gray-50">
             <div className="max-w-5xl mx-auto px-6 py-8">
+                {/* back (admin) */}
+                {isAdmin && (
+                    <button onClick={() => navigate('/btb')} className="text-sm text-gray-400 hover:text-[#111b21] mb-3">← כל הלקוחות</button>
+                )}
+
                 {/* header */}
                 <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
                     <div className="flex items-center gap-3 flex-wrap">
-                        {isAdmin && accounts.length > 1 ? (
-                            <select value={activeId || ''} onChange={e => setActiveId(e.target.value)}
-                                className="text-xl font-bold text-[#111b21] bg-transparent border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-200">
-                                {accounts.map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
-                            </select>
-                        ) : (
-                            <h1 className="text-xl font-bold text-[#111b21]">{account?.name}</h1>
-                        )}
+                        <h1 className="text-xl font-bold text-[#111b21]">{account?.name}</h1>
                         <span dir="ltr" className="text-sm text-gray-400">{account?.phone}</span>
                         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
                         {isAdmin && account?.client?.email && (
@@ -333,7 +274,7 @@ export default function BtbPage() {
                                 style={{ backgroundColor: BTB.accent }}>＋ העלה סטטוס</button>
                         )}
 
-                        {/* כלי ניהול — אדמין בלבד */}
+                        {/* ניהול חיבור — אדמין בלבד */}
                         {isAdmin && account?.waStatus === 'connected' && (
                             <>
                                 <button onClick={() => testInput.current?.click()} title="העלאה→הורדה→מחיקה אוטומטית עם דוח איכות"
@@ -346,7 +287,6 @@ export default function BtbPage() {
                                 style={{ backgroundColor: BTB.color }}>חבר / QR</button>
                         )}
                         {isAdmin && <button onClick={reconnect} className="px-3.5 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">חיבור מחדש</button>}
-                        {isAdmin && <button onClick={() => setShowCreate(true)} className="px-3.5 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: BTB.color }}>＋ לקוח חדש</button>}
 
                         {/* לקוח */}
                         {isClient && account?.waStatus !== 'connected' && (
@@ -372,7 +312,7 @@ export default function BtbPage() {
                 {/* status cards */}
                 <h2 className="text-sm font-semibold text-gray-500 mb-3">סטטוסים — לחץ לצפייה במי שצפה</h2>
                 {statuses.length === 0
-                    ? <div className="bg-white rounded-xl border border-gray-100 p-8 text-sm text-gray-400 text-center mb-8">עדיין אין סטטוסים. העלה סטטוס מהטלפון וצפה כאן.</div>
+                    ? <div className="bg-white rounded-xl border border-gray-100 p-8 text-sm text-gray-400 text-center mb-8">עדיין אין סטטוסים. העלה סטטוס וצפה כאן.</div>
                     : <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 mb-8">
                         {statuses.map(s => <StatusCard key={s._id} s={s} onClick={() => openViewers(s)} />)}
                     </div>}
@@ -393,18 +333,11 @@ export default function BtbPage() {
                 </div>
             </div>
 
-            {showCreate && (
-                <CreateAccount
-                    onClose={() => setShowCreate(false)}
-                    onCreated={(id) => { setShowCreate(false); setActiveId(id); fetchAccounts(); }}
-                />
-            )}
-
             {showUpload && (
                 <StatusUploadModal
-                    accountId={activeId}
+                    accountId={accountId}
                     onClose={() => setShowUpload(false)}
-                    onPosted={(r) => { fetchDetail(activeId); alert(`פורסם ${r.count} סטטוס(ים) ל-${r.recipients} אנשי קשר`); }}
+                    onPosted={(r) => { fetchDetail(); alert(`פורסם ${r.count} סטטוס(ים) ל-${r.recipients} אנשי קשר`); }}
                 />
             )}
 
@@ -421,7 +354,7 @@ export default function BtbPage() {
                             <p className="text-xs text-gray-400">{fmtDate(selStatus.postedAt)} · 👁 {selStatus.viewsCount}</p>
                         </div>
                     </div>
-                    <ProbeReport probe={selStatus.mediaProbe} />
+                    {isAdmin && <ProbeReport probe={selStatus.mediaProbe} />}
                     <div className="max-h-80 overflow-auto -mx-2">
                         {selViewers === null
                             ? <p className="p-4 text-sm text-gray-400 text-center">טוען…</p>

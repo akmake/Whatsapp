@@ -97,6 +97,22 @@ router.get('/', async (req, res) => {
   res.json(result);
 });
 
+// ─── חשבון בודד (meta) — לכותרת הדשבורד ──────────────────────────
+router.get('/:id', async (req, res) => {
+  const a = await BtbAccount.findById(req.params.id);
+  if (!a) return res.status(404).json({ error: 'חשבון לא נמצא' });
+  let client = null;
+  if (req.user.role === 'admin') {
+    const c = await User.findOne({ role: 'client', btbAccountId: a._id }).select('email active').lean();
+    if (c) client = { email: c.email, active: c.active };
+  }
+  res.json({
+    _id: a._id, name: a.name, phone: a.phone, active: a.active,
+    targetFollowers: a.targetFollowers, createdAt: a.createdAt,
+    waStatus: statusManager.getStatus(a._id.toString()), client,
+  });
+});
+
 // ─── יצירת חשבון + (אופציונלי) כניסת לקוח מקושרת ──────────────────
 router.post('/', restrictTo('admin'), async (req, res) => {
   const { name, phone, email, password } = req.body;

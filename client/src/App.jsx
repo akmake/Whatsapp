@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import ServicesPage from '@/pages/ServicesPage';
 import BtbPage from '@/pages/BtbPage';
+import BtbConsole from '@/pages/BtbConsole';
 import AdminPage from '@/pages/AdminPage';
 import DashboardPage from '@/pages/DashboardPage';
 import LoginPage from '@/pages/LoginPage';
@@ -44,8 +45,9 @@ export default function App() {
             <Route path="/wtm/monitor" element={<DashboardPage />} />
             <Route path="/wtm/logs" element={<LogsPage />} />
 
-            {/* BTB — שירות בעלי עסקים */}
-            <Route path="/btb" element={<BtbPage />} />
+            {/* BTB — קונסולת לקוחות (רשימה) + drill-in לדשבורד של לקוח */}
+            <Route path="/btb" element={<BtbConsole />} />
+            <Route path="/btb/:id" element={<BtbPage />} />
 
             {/* תאימות לאחור לקישורים ישנים */}
             <Route path="/dashboard" element={<Navigate to="/wtm/monitor" replace />} />
