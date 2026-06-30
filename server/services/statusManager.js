@@ -79,9 +79,10 @@ async function onStatusPost(waTenantId, m) {
       await StatusPost.updateOne({ _id: post._id }, { $set: { viewsCount } });
     }
 
+    logger.warn('btb', `[DIAG] onStatusPost ok post=${post._id} mtype=${post.mediaType}`, { accountId, msgId });
     broadcast('btb_status');
   } catch (err) {
-    logger.error('btb', `onStatusPost failed: ${err.message}`, { accountId });
+    logger.error('btb', `onStatusPost failed: ${err.message}`, { accountId, stack: err.stack });
   }
 }
 
@@ -117,10 +118,11 @@ async function onStatusReceipt(waTenantId, view) {
     if (res.upsertedCount > 0) {
       await StatusPost.updateOne({ _id: post._id }, { $inc: { viewsCount: 1 } });
     }
+    logger.warn('btb', `[DIAG] onStatusReceipt ok post=${post._id} mtype=${post.mediaType} newView=${res.upsertedCount > 0}`, { accountId, msgId });
     broadcast('btb_status');
   } catch (err) {
     if (err?.code !== 11000) // התעלמות מכפילות מירוץ
-      logger.error('btb', `onStatusReceipt failed: ${err.message}`, { accountId });
+      logger.error('btb', `onStatusReceipt failed: ${err.message}`, { accountId, stack: err.stack });
   }
 }
 

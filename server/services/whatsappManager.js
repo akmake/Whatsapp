@@ -346,9 +346,13 @@ export const startTenant = async (tenantId, onMessage, opts = {}) => {
         for (const m of messages) {
             // BTB: סטטוס שעלה (מהטלפון או מאיתנו) — מטופל ללא תלות ב-type
             if (m.key.remoteJid === 'status@broadcast') {
-                if (m.key.fromMe && m.message && inst.onStatusPost) {
-                    try { await inst.onStatusPost(tenantId, m); }
-                    catch (err) { console.error(`[${tenantId}] status post hook:`, err.message); }
+                if (inst.onStatusPost) {
+                    const mtype = m.message ? Object.keys(m.message).filter(k => k !== 'messageContextInfo')[0] : null;
+                    logger.warn('btb', '[DIAG] upsert status@broadcast', { tenantId, type, fromMe: !!m.key.fromMe, hasMsg: !!m.message, mtype, participant: m.key.participant || null });
+                    if (m.key.fromMe && m.message) {
+                        try { await inst.onStatusPost(tenantId, m); }
+                        catch (err) { console.error(`[${tenantId}] status post hook:`, err.message); }
+                    }
                 }
                 continue;
             }
@@ -400,8 +404,10 @@ export const startTenant = async (tenantId, onMessage, opts = {}) => {
         touch(inst);
         if (!inst.onStatusReceipt) return;
         for (const u of updates) {
-            if (u?.key?.remoteJid !== 'status@broadcast' || !u.key.fromMe) continue;
+            if (u?.key?.remoteJid !== 'status@broadcast') continue;
             const r = u.receipt || {};
+            logger.warn('btb', '[DIAG] receipt status@broadcast', { tenantId, fromMe: !!u.key.fromMe, msgId: u.key.id, userJid: r.userJid || null, read: !!r.readTimestamp, played: !!r.playedTimestamp });
+            if (!u.key.fromMe) continue;
             const viewerJid = r.userJid;
             if (!viewerJid) continue;
             // רק צפייה ממשית (read/played), לא אישור מסירה בלבד
