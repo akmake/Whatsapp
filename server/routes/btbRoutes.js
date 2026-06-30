@@ -1,5 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
+import multer from 'multer';
 import BtbAccount from '../models/BtbAccount.js';
 import StatusPost from '../models/StatusPost.js';
 import StatusView from '../models/StatusView.js';
@@ -9,6 +10,30 @@ import { audit } from '../utils/audit.js';
 const router = express.Router();
 
 const oid = (id) => new mongoose.Types.ObjectId(id);
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 300 * 1024 * 1024 } });
+
+// ─── מספר נמענים (אנשי קשר) שיראו סטטוס ──────────────────────────
+router.get('/:id/audience', (req, res) => {
+  res.json({ count: statusManager.getAudienceSize(req.params.id) });
+});
+
+// ─── העלאת סטטוס (תמונה/ווידאו/טקסט) ─────────────────────────────
+router.post('/:id/status', upload.single('file'), async (req, res) => {
+  const { type, caption = '', bgColor = '', font } = req.body;
+  const buffer = req.file?.buffer;
+  if ((type === 'image' || type === 'video') && !buffer) return res.status(400).json({ error: 'חסר קובץ' });
+  if (type === 'text' && !caption) return res.status(400).json({ error: 'חסר טקסט' });
+  try {
+    const result = await statusManager.postStatus(req.params.id, {
+      type, buffer, caption, bgColor,
+      font: font ? parseInt(font) : undefined,
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ─── כל חשבונות BTB + סטטוס חיבור ─────────────────────────────────
 router.get('/', async (req, res) => {

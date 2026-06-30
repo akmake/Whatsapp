@@ -63,13 +63,23 @@ export const isConnected = (tenantId) => {
     return inst?.status === 'connected' && inst?.sock?.user != null;
 };
 
-export const sendMessage = async (tenantId, jid, content) => {
+export const sendMessage = async (tenantId, jid, content, options) => {
     const inst = instances.get(tenantId);
     if (!inst?.sock) throw new Error('לא מחובר');
     inst.stats.msgsSent++;
     inst.stats.lastMsgAt = new Date().toISOString();
     inst.stats.lastMsgDirection = 'wa_out';
-    return await inst.sock.sendMessage(jid, content);
+    return await inst.sock.sendMessage(jid, content, options);
+};
+
+// כל ה-jid של אנשי הקשר (טלפון) — לרשימת נמעני הסטטוס (statusJidList).
+export const getContactJids = (tenantId) => {
+    const inst = instances.get(tenantId);
+    if (!inst) return [];
+    const set = new Set();
+    for (const k of Object.keys(inst.contactName || {})) if (k.endsWith('@s.whatsapp.net')) set.add(k);
+    for (const v of Object.values(inst.lidToPhone || {})) if (typeof v === 'string' && v.endsWith('@s.whatsapp.net')) set.add(v);
+    return [...set];
 };
 
 export const fetchGroups = async (tenantId) => {

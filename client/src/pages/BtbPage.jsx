@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '@/services/api';
 import { useSSE } from '@/hooks/useSSE';
 import Modal from '@/components/ui/Modal';
+import StatusUploadModal from '@/components/btb/StatusUploadModal';
 import { SERVICES } from '@/config/services';
 
 const BTB = SERVICES.btb;
@@ -116,6 +117,7 @@ export default function BtbPage() {
     const [qrImg, setQrImg]       = useState(null);
     const [selStatus, setSelStatus] = useState(null);
     const [selViewers, setSelViewers] = useState(null);
+    const [showUpload, setShowUpload] = useState(false);
 
     const fetchAccounts = useCallback(async () => {
         const res = await api.get('/btb');
@@ -185,6 +187,10 @@ export default function BtbPage() {
                         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
                     </div>
                     <div className="flex items-center gap-2">
+                        {account?.waStatus === 'connected' && (
+                            <button onClick={() => setShowUpload(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                                style={{ backgroundColor: BTB.accent }}>＋ העלה סטטוס</button>
+                        )}
                         {account?.waStatus !== 'connected' && (
                             <button onClick={openQR} className="px-3.5 py-2 rounded-lg text-sm font-medium text-white"
                                 style={{ backgroundColor: BTB.color }}>חבר / QR</button>
@@ -229,6 +235,14 @@ export default function BtbPage() {
                     ))}
                 </div>
             </div>
+
+            {showUpload && (
+                <StatusUploadModal
+                    accountId={activeId}
+                    onClose={() => setShowUpload(false)}
+                    onPosted={(r) => { fetchDetail(activeId); alert(`פורסם ${r.count} סטטוס(ים) ל-${r.recipients} אנשי קשר`); }}
+                />
+            )}
 
             {selStatus && (
                 <Modal onClose={() => setSelStatus(null)}>
