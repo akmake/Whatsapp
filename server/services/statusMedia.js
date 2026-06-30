@@ -42,7 +42,9 @@ export async function processVideo(buffer) {
           '-pix_fmt', 'yuv420p',
           '-preset', 'slow',
           '-crf', '18',
-          '-vf', "scale='min(1080,iw)':'min(1920,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+          // וואטסאפ לא מקודדת מחדש סטטוס (E2E) — לכן הצלע הארוכה עד 1920 (לא 1080):
+          // ההורדה היחידה היא שלנו, וגודל הקובץ עדיין רחוק מהתקרה. פורטרייט נשאר 1080×1920.
+          '-vf', "scale='min(1920,iw)':'min(1920,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
           '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_SECONDS})`,
           '-f', 'segment',
           '-segment_time', String(SEGMENT_SECONDS),

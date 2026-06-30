@@ -246,7 +246,7 @@ export default function BtbPage() {
             const fd = new FormData();
             fd.append('file', file);
             fd.append('type', type);
-            const res = await api.post(`/btb/${activeId}/status-test`, fd);
+            const res = await api.post(`/btb/${activeId}/status-test`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
             setTest({ result: res.data });
         } catch (err) {
             setTest({ error: err.response?.data?.error || 'הבדיקה נכשלה' });
