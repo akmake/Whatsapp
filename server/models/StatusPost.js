@@ -7,7 +7,7 @@ const statusPostSchema = new mongoose.Schema({
 
   msgId:        { type: String, required: true },        // WA message key id (status@broadcast)
   postedAt:     { type: Date, default: Date.now },
-  mediaType:    { type: String, enum: ['image', 'video', 'text'], required: true },
+  mediaType:    { type: String, enum: ['image', 'video', 'text', 'unknown'], required: true },
   caption:      { type: String, default: '' },
 
   // לתצוגת כרטיסיה: תמונה ממוזערת (data URL) לתמונה/פריים-ראשון של ווידאו;

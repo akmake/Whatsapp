@@ -52,12 +52,11 @@ async function onStatusPost(waTenantId, m) {
   const accountId = waTenantId.replace('btb_', '');
   const msgId = m.key.id;
   try {
+    // $set מעשיר גם כרטיסייה שכבר נוצרה כ-stub מתוך רסיט
     const post = await StatusPost.findOneAndUpdate(
       { accountId, msgId },
       {
-        $setOnInsert: {
-          accountId,
-          msgId,
+        $set: {
           postedAt: m.messageTimestamp ? new Date(Number(m.messageTimestamp) * 1000) : new Date(),
           mediaType: mediaTypeOf(m),
           caption: getMessageText(m),
@@ -65,6 +64,7 @@ async function onStatusPost(waTenantId, m) {
           bgColor: bgColorOf(m),
           source: 'phone',
         },
+        $setOnInsert: { accountId, msgId },
       },
       { upsert: true, new: true }
     );
@@ -90,8 +90,13 @@ async function onStatusReceipt(waTenantId, view) {
   const accountId = waTenantId.replace('btb_', '');
   const { msgId, viewerJid, viewedAt, receiptType } = view;
   try {
-    const post = await StatusPost.findOne({ accountId, msgId }).select('_id');
-    // טלפון אמיתי מתוך ה-@lid; '' אם זה lid שעדיין לא מופה (יזוהה מאוחר יותר ב-backfill)
+    // יוצרים/מוודאים כרטיסיית סטטוס מתוך הרסיט עצמו (גם אם ההודעה היוצאת לא סונכרנה).
+    // אם onStatusPost כבר רץ — הכרטיסייה קיימת עם התוכן המלא ולא נדרסת.
+    const post = await StatusPost.findOneAndUpdate(
+      { accountId, msgId },
+      { $setOnInsert: { accountId, msgId, mediaType: 'unknown', source: 'phone', postedAt: viewedAt ?? new Date() } },
+      { upsert: true, new: true }
+    );
     const viewerPhone = resolvePhone(waTenantId, viewerJid);
     const res = await StatusView.updateOne(
       { accountId, msgId, viewerJid },
@@ -99,7 +104,7 @@ async function onStatusReceipt(waTenantId, view) {
         $setOnInsert: {
           accountId,
           msgId,
-          statusId: post?._id ?? null,
+          statusId: post._id,
           viewerJid,
           viewerPhone,
           viewedAt: viewedAt ?? new Date(),
@@ -109,7 +114,7 @@ async function onStatusReceipt(waTenantId, view) {
       { upsert: true }
     );
     // צופה חדש => מגדילים את מונה הצפיות של הסטטוס
-    if (res.upsertedCount > 0 && post?._id) {
+    if (res.upsertedCount > 0) {
       await StatusPost.updateOne({ _id: post._id }, { $inc: { viewsCount: 1 } });
     }
     broadcast('btb_status');

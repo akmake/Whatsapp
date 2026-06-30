@@ -13,7 +13,7 @@ const WA_BADGE = {
     disconnected:{ label: 'מנותק',     cls: 'bg-red-100 text-red-600' },
 };
 
-const MEDIA_ICON = { image: '🖼️', video: '🎬', text: '📝' };
+const MEDIA_ICON = { image: '🖼️', video: '🎬', text: '📝', unknown: '🕓' };
 
 function fmtDate(ts) {
     if (!ts) return '—';
