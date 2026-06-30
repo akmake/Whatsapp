@@ -36,12 +36,12 @@ export async function processVideo(buffer) {
       ffmpeg(inPath)
         .videoCodec('libx264')
         .audioCodec('aac')
-        .audioBitrate('128k')
+        .audioBitrate('192k')
         .outputOptions([
           '-profile:v', 'high',
           '-pix_fmt', 'yuv420p',
           '-preset', 'slow',
-          '-crf', '18',
+          '-crf', '16',
           // וואטסאפ לא מקודדת מחדש סטטוס (E2E) — לכן הצלע הארוכה עד 1920 (לא 1080):
           // ההורדה היחידה היא שלנו, וגודל הקובץ עדיין רחוק מהתקרה. פורטרייט נשאר 1080×1920.
           '-vf', "scale='min(1920,iw)':'min(1920,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
