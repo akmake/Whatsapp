@@ -85,7 +85,8 @@ export default function BtbPage() {
     const [stats, setStats]       = useState(null);
     const [statuses, setStatuses] = useState([]);
     const [viewers, setViewers]   = useState([]);
-    const [qrModal, setQrModal]   = useState(null);
+    const [qrOpen, setQrOpen]     = useState(false);
+    const [qrImg, setQrImg]       = useState(null);
 
     const fetchAccounts = useCallback(async () => {
         const res = await api.get('/btb');
@@ -109,17 +110,23 @@ export default function BtbPage() {
 
     const account = accounts?.find(a => a._id === activeId);
 
-    const openQR = async () => {
-        setQrModal({ loading: true, name: account?.name });
+    const pollQR = useCallback(async () => {
         try {
             const res = await api.get(`/btb/${activeId}/qr`);
-            if (res.data.connected) { setQrModal(null); fetchAccounts(); }
-            else setQrModal({ qr: res.data.qr, name: account?.name });
-        } catch {
-            setQrModal(null);
-            alert('לא התקבל QR — נסה שוב');
-        }
-    };
+            if (res.data.connected) { setQrOpen(false); fetchAccounts(); }
+            else if (res.data.qr) setQrImg(res.data.qr);
+        } catch { /* ה-interval ינסה שוב */ }
+    }, [activeId, fetchAccounts]);
+
+    const openQR = () => { setQrImg(null); setQrOpen(true); pollQR(); };
+
+    // ריענון ה-QR כל עוד המודאל פתוח (וואטסאפ מחליף קוד כל ~20ש'); סגירה אוטומטית בחיבור
+    useEffect(() => {
+        if (!qrOpen) return;
+        if (account?.waStatus === 'connected') { setQrOpen(false); return; }
+        const iv = setInterval(pollQR, 15000);
+        return () => clearInterval(iv);
+    }, [qrOpen, account?.waStatus, pollQR]);
 
     const reconnect = async () => { await api.post(`/btb/${activeId}/reconnect`); fetchAccounts(); };
 
@@ -204,14 +211,14 @@ export default function BtbPage() {
                 </div>
             </div>
 
-            {qrModal && (
-                <Modal onClose={() => setQrModal(null)}>
+            {qrOpen && (
+                <Modal onClose={() => setQrOpen(false)}>
                     <div className="text-center">
-                        <p className="text-lg font-bold mb-1 text-[#111b21]">{qrModal.name}</p>
-                        <p className="text-sm text-[#8696a0] mb-5">סרוק עם וואטסאפ</p>
-                        {qrModal.loading
-                            ? <div className="w-60 h-60 mx-auto flex items-center justify-center text-gray-400">טוען QR…</div>
-                            : <img src={qrModal.qr} alt="QR" className="mx-auto w-60 h-60 rounded-xl" />}
+                        <p className="text-lg font-bold mb-1 text-[#111b21]">{account?.name}</p>
+                        <p className="text-sm text-[#8696a0] mb-5">סרוק עם וואטסאפ — הקוד מתרענן אוטומטית</p>
+                        {qrImg
+                            ? <img src={qrImg} alt="QR" className="mx-auto w-60 h-60 rounded-xl" />
+                            : <div className="w-60 h-60 mx-auto flex items-center justify-center text-gray-400">טוען QR…</div>}
                         <p className="text-xs text-[#8696a0] mt-4">וואטסאפ ← מכשירים מקושרים ← קשר מכשיר</p>
                     </div>
                 </Modal>

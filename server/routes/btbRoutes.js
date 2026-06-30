@@ -59,7 +59,9 @@ router.put('/:id', async (req, res) => {
 // ─── QR לחיבור ───────────────────────────────────────────────────
 router.get('/:id/qr', async (req, res) => {
   const id = req.params.id;
-  if (!statusManager.isConnected(id)) await statusManager.connect(id);
+  // מתחברים רק אם אין סוקט חי — כדי לא להפיל QR קיים שכבר מוצג למשתמש.
+  // אם כבר יש סשן (waiting_qr/connecting) פשוט נחזיר את ה-QR הנוכחי.
+  if (statusManager.getStatus(id) === 'disconnected') await statusManager.connect(id);
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     const qr = statusManager.getQR(id);
