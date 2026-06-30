@@ -10,6 +10,11 @@ const statusPostSchema = new mongoose.Schema({
   mediaType:    { type: String, enum: ['image', 'video', 'text'], required: true },
   caption:      { type: String, default: '' },
 
+  // לתצוגת כרטיסיה: תמונה ממוזערת (data URL) לתמונה/פריים-ראשון של ווידאו;
+  // לסטטוס טקסט — צבע רקע. (jpegThumbnail מגיע מובנה בהודעה — בלי הורדה)
+  thumbnail:    { type: String, default: '' },
+  bgColor:      { type: String, default: '' },
+
   // העלאות שלנו / חיתוך ווידאו ארוך
   source:       { type: String, enum: ['upload', 'phone'], default: 'phone' }, // הועלה דרכנו / זוהה מהטלפון
   batchId:      { type: String, default: null },         // מקבץ מקטעים של אותה העלאה

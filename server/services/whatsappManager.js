@@ -90,12 +90,18 @@ export const getAllStats = () => {
     return result;
 };
 
-export const extractPhone = (msg, tenantId) => {
-    const jid = msg.key.remoteJid || '';
-    if (jid.endsWith('@lid') && tenantId) {
+export const extractPhone = (msg, tenantId) =>
+    resolvePhone(tenantId, msg.key.remoteJid || '');
+
+// ממיר jid כלשהו (כולל @lid) למספר טלפון, לפי מיפוי ה-LID של ה-instance.
+// מחזיר '' אם זה @lid שעוד לא מופה (לא יודעים מי זה).
+export const resolvePhone = (tenantId, rawJid = '') => {
+    // נרמול סיומת מכשיר: 123:5@lid -> 123@lid
+    const jid = rawJid.replace(/:\d+@/, '@');
+    if (jid.endsWith('@lid')) {
         const inst = instances.get(tenantId);
         const phoneJid = inst?.lidToPhone?.[jid] || '';
-        if (phoneJid) return phoneJid.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+        return phoneJid ? phoneJid.replace('@s.whatsapp.net', '').replace(/\D/g, '') : '';
     }
     return jid.replace('@s.whatsapp.net', '').replace(/\D/g, '');
 };

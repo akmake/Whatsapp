@@ -127,6 +127,30 @@ router.get('/:id/statuses', async (req, res) => {
   res.json(statuses);
 });
 
+// ─── צופים של סטטוס בודד ─────────────────────────────────────────
+router.get('/:id/statuses/:statusId/viewers', async (req, res) => {
+  const post = await StatusPost.findOne({ _id: req.params.statusId, accountId: req.params.id });
+  if (!post) return res.status(404).json({ error: 'סטטוס לא נמצא' });
+
+  const viewers = await StatusView.find({ accountId: req.params.id, msgId: post.msgId })
+    .sort({ viewedAt: -1 })
+    .lean();
+
+  res.json(viewers.map(v => ({
+    viewerJid: v.viewerJid,
+    phone: v.viewerPhone,
+    name: v.viewerName,
+    viewedAt: v.viewedAt,
+    receiptType: v.receiptType,
+  })));
+});
+
+// ─── זיהוי מחדש של צופים ללא טלפון (LID שלא היה ממופה) ────────────
+router.post('/:id/resolve-viewers', async (req, res) => {
+  const result = await statusManager.resolveUnknownViewers(req.params.id);
+  res.json(result);
+});
+
 // ─── דירוג צופים (גרעין העוקבים) ─────────────────────────────────
 router.get('/:id/top-viewers', async (req, res) => {
   const accountId = oid(req.params.id);

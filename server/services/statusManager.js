@@ -6,6 +6,7 @@ import {
   startTenant,
   stopTenant,
   resetSession,
+  resolvePhone,
   getStatus as waGetStatus,
   getQR as waGetQR,
   isConnected as waIsConnected,
@@ -20,14 +21,27 @@ import { logger } from '../utils/logger.js';
 // namespace ל-session/instance של BTB כדי לא להתנגש ב-WTM
 const waId = (accountId) => `btb_${accountId}`;
 
-const jidToPhone = (jid = '') =>
-  jid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/\D/g, '');
-
 const mediaTypeOf = (m) => {
   const t = getMessageType(m);
   if (t === 'imageMessage') return 'image';
   if (t === 'videoMessage') return 'video';
   return 'text';
+};
+
+// jpegThumbnail מובנה בהודעת תמונה/ווידאו => data URL לכרטיסיה (בלי הורדה)
+const thumbnailOf = (m) => {
+  const msg = m.message || {};
+  const thumb = msg.imageMessage?.jpegThumbnail || msg.videoMessage?.jpegThumbnail;
+  if (!thumb) return '';
+  try { return `data:image/jpeg;base64,${Buffer.from(thumb).toString('base64')}`; }
+  catch { return ''; }
+};
+
+// ARGB (int) של סטטוס טקסט => צבע hex לרקע הכרטיסיה
+const bgColorOf = (m) => {
+  const argb = m.message?.extendedTextMessage?.backgroundArgb;
+  if (!argb && argb !== 0) return '';
+  return '#' + (argb >>> 0).toString(16).padStart(8, '0').slice(2); // מתעלמים מ-alpha
 };
 
 // ─── hooks ────────────────────────────────────────────────────────
@@ -37,7 +51,7 @@ async function onStatusPost(waTenantId, m) {
   const accountId = waTenantId.replace('btb_', '');
   const msgId = m.key.id;
   try {
-    await StatusPost.updateOne(
+    const post = await StatusPost.findOneAndUpdate(
       { accountId, msgId },
       {
         $setOnInsert: {
@@ -46,11 +60,24 @@ async function onStatusPost(waTenantId, m) {
           postedAt: m.messageTimestamp ? new Date(Number(m.messageTimestamp) * 1000) : new Date(),
           mediaType: mediaTypeOf(m),
           caption: getMessageText(m),
+          thumbnail: thumbnailOf(m),
+          bgColor: bgColorOf(m),
           source: 'phone',
         },
       },
-      { upsert: true }
+      { upsert: true, new: true }
     );
+
+    // קישור צפיות שכבר נרשמו (רסיט שהגיע לפני שזיהינו את הסטטוס) + ספירה מחדש
+    await StatusView.updateMany(
+      { accountId, msgId, statusId: null },
+      { $set: { statusId: post._id } }
+    );
+    const viewsCount = await StatusView.countDocuments({ accountId, msgId });
+    if (viewsCount !== post.viewsCount) {
+      await StatusPost.updateOne({ _id: post._id }, { $set: { viewsCount } });
+    }
+
     broadcast('btb_status');
   } catch (err) {
     logger.error('btb', `onStatusPost failed: ${err.message}`, { accountId });
@@ -63,6 +90,8 @@ async function onStatusReceipt(waTenantId, view) {
   const { msgId, viewerJid, viewedAt, receiptType } = view;
   try {
     const post = await StatusPost.findOne({ accountId, msgId }).select('_id');
+    // טלפון אמיתי מתוך ה-@lid; '' אם זה lid שעדיין לא מופה (יזוהה מאוחר יותר ב-backfill)
+    const viewerPhone = resolvePhone(waTenantId, viewerJid);
     const res = await StatusView.updateOne(
       { accountId, msgId, viewerJid },
       {
@@ -71,7 +100,7 @@ async function onStatusReceipt(waTenantId, view) {
           msgId,
           statusId: post?._id ?? null,
           viewerJid,
-          viewerPhone: jidToPhone(viewerJid),
+          viewerPhone,
           viewedAt: viewedAt ?? new Date(),
           receiptType: receiptType ?? 'read',
         },
@@ -90,6 +119,22 @@ async function onStatusReceipt(waTenantId, view) {
 }
 
 // ─── lifecycle ────────────────────────────────────────────────────
+
+// ניסיון לזהות צופים שנשמרו ללא טלפון (lid שלא היה ממופה בזמן הצפייה).
+// מיפוי ה-LID מתעשר עם הזמן (contacts.upsert + קבצי session), אז כדאי לנסות שוב.
+export async function resolveUnknownViewers(accountId) {
+  const unknown = await StatusView.find({ accountId, viewerPhone: '' }).select('_id viewerJid');
+  let resolved = 0;
+  for (const v of unknown) {
+    const phone = resolvePhone(waId(accountId), v.viewerJid);
+    if (phone) {
+      await StatusView.updateOne({ _id: v._id }, { $set: { viewerPhone: phone } });
+      resolved++;
+    }
+  }
+  if (resolved) broadcast('btb_status');
+  return { checked: unknown.length, resolved };
+}
 
 export const connect = (accountId) =>
   startTenant(waId(accountId), async () => {}, { onStatusPost, onStatusReceipt });

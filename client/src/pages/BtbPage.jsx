@@ -78,6 +78,33 @@ function Metric({ label, value, sub }) {
     );
 }
 
+// תווית זיהוי של צופה — טלפון/שם, או "לא זוהה" אם זה LID שלא מופה
+const viewerLabel = (v) => v.name || v.phone || 'לא זוהה';
+
+// ─── כרטיסיית סטטוס ───────────────────────────────────────────────
+function StatusCard({ s, onClick }) {
+    return (
+        <button onClick={onClick} className="group text-right rounded-xl overflow-hidden border border-gray-100 bg-white hover:shadow-md transition">
+            <div className="relative bg-gray-100 flex items-center justify-center overflow-hidden" style={{ aspectRatio: '9 / 16' }}>
+                {s.thumbnail
+                    ? <img src={s.thumbnail} alt="" className="w-full h-full object-cover" />
+                    : s.mediaType === 'text'
+                        ? <div className="w-full h-full flex items-center justify-center p-3 text-white text-xs text-center leading-snug"
+                            style={{ backgroundColor: s.bgColor || BTB.color }}>{s.caption || 'טקסט'}</div>
+                        : <span className="text-4xl opacity-60">{MEDIA_ICON[s.mediaType] || '❓'}</span>}
+
+                <span className="absolute top-1.5 right-1.5 text-sm drop-shadow">{MEDIA_ICON[s.mediaType]}</span>
+                <span className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent text-white text-xs px-2 py-1.5 font-semibold">
+                    👁 {s.viewsCount}
+                </span>
+            </div>
+            <div className="px-2 py-1.5">
+                <p className="text-[11px] text-gray-400">{fmtDate(s.postedAt)}</p>
+            </div>
+        </button>
+    );
+}
+
 // ─── הדף הראשי ────────────────────────────────────────────────────
 export default function BtbPage() {
     const [accounts, setAccounts] = useState(null);
@@ -87,6 +114,9 @@ export default function BtbPage() {
     const [viewers, setViewers]   = useState([]);
     const [qrOpen, setQrOpen]     = useState(false);
     const [qrImg, setQrImg]       = useState(null);
+    const [selStatus, setSelStatus] = useState(null);
+    const [selViewers, setSelViewers] = useState(null);
+    const [resolving, setResolving]   = useState(false);
 
     const fetchAccounts = useCallback(async () => {
         const res = await api.get('/btb');
@@ -130,6 +160,22 @@ export default function BtbPage() {
 
     const reconnect = async () => { await api.post(`/btb/${activeId}/reconnect`); fetchAccounts(); };
 
+    const openViewers = async (s) => {
+        setSelStatus(s); setSelViewers(null);
+        try { setSelViewers((await api.get(`/btb/${activeId}/statuses/${s._id}/viewers`)).data); }
+        catch { setSelViewers([]); }
+    };
+
+    const resolveViewers = async () => {
+        setResolving(true);
+        try {
+            const res = await api.post(`/btb/${activeId}/resolve-viewers`);
+            await fetchDetail(activeId);
+            alert(`זוהו ${res.data.resolved} מתוך ${res.data.checked} צופים שלא היו מזוהים`);
+        } catch { alert('שגיאה בזיהוי'); }
+        finally { setResolving(false); }
+    };
+
     if (accounts === null) return (
         <div className="h-full flex items-center justify-center text-gray-400 bg-gray-50">טוען…</div>
     );
@@ -171,45 +217,66 @@ export default function BtbPage() {
                     <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: BTB.accent }} />
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* statuses */}
-                    <div>
-                        <h2 className="text-sm font-semibold text-gray-500 mb-2">סטטוסים אחרונים</h2>
-                        <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50 max-h-96 overflow-auto">
-                            {statuses.length === 0 && <p className="p-4 text-sm text-gray-400 text-center">עדיין אין סטטוסים. העלה סטטוס מהטלפון וצפה כאן.</p>}
-                            {statuses.map(s => (
-                                <div key={s._id} className="flex items-center justify-between px-4 py-3">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        <span>{MEDIA_ICON[s.mediaType] || '❓'}</span>
-                                        <span className="text-sm text-[#111b21] truncate">{s.caption || s.mediaType}</span>
-                                    </div>
-                                    <div className="flex items-center gap-3 flex-shrink-0">
-                                        <span className="text-xs text-gray-400">{fmtDate(s.postedAt)}</span>
-                                        <span className="text-sm font-semibold" style={{ color: BTB.color }}>👁 {s.viewsCount}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                {/* status cards */}
+                <h2 className="text-sm font-semibold text-gray-500 mb-3">סטטוסים — לחץ לצפייה במי שצפה</h2>
+                {statuses.length === 0
+                    ? <div className="bg-white rounded-xl border border-gray-100 p-8 text-sm text-gray-400 text-center mb-8">עדיין אין סטטוסים. העלה סטטוס מהטלפון וצפה כאן.</div>
+                    : <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 mb-8">
+                        {statuses.map(s => <StatusCard key={s._id} s={s} onClick={() => openViewers(s)} />)}
+                    </div>}
 
-                    {/* viewers */}
-                    <div>
-                        <h2 className="text-sm font-semibold text-gray-500 mb-2">גרעין העוקבים (לפי כמות סטטוסים שנצפו)</h2>
-                        <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50 max-h-96 overflow-auto">
-                            {viewers.length === 0 && <p className="p-4 text-sm text-gray-400 text-center">עדיין אין צפיות מתועדות.</p>}
-                            {viewers.map((v, i) => (
-                                <div key={v.viewerJid} className="flex items-center justify-between px-4 py-2.5">
-                                    <div className="flex items-center gap-2.5 min-w-0">
-                                        <span className="text-xs text-gray-300 w-5 text-center">{i + 1}</span>
-                                        <span dir="ltr" className="text-sm text-[#111b21] truncate">{v.name || v.phone || v.viewerJid}</span>
-                                    </div>
-                                    <span className="text-sm font-semibold flex-shrink-0" style={{ color: BTB.color }}>{v.statusesViewed}</span>
-                                </div>
-                            ))}
+                {/* core followers */}
+                <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm font-semibold text-gray-500">גרעין העוקבים <span className="font-normal text-gray-400">(לפי כמות סטטוסים שנצפו)</span></h2>
+                    <button onClick={resolveViewers} disabled={resolving}
+                        className="text-xs font-medium px-3 py-1.5 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-50">
+                        {resolving ? 'מזהה…' : '🔄 זהה צופים לא מזוהים'}
+                    </button>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50">
+                    {viewers.length === 0 && <p className="p-4 text-sm text-gray-400 text-center">עדיין אין צפיות מתועדות.</p>}
+                    {viewers.map((v, i) => (
+                        <div key={v.viewerJid} className="flex items-center justify-between px-4 py-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="text-xs text-gray-300 w-5 text-center">{i + 1}</span>
+                                <span dir="ltr" className={`text-sm truncate ${v.phone || v.name ? 'text-[#111b21]' : 'text-gray-400 italic'}`}>{viewerLabel(v)}</span>
+                            </div>
+                            <span className="text-sm font-semibold flex-shrink-0" style={{ color: BTB.color }}>{v.statusesViewed}</span>
                         </div>
-                    </div>
+                    ))}
                 </div>
             </div>
+
+            {selStatus && (
+                <Modal onClose={() => setSelStatus(null)}>
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="w-12 h-16 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
+                            {selStatus.thumbnail
+                                ? <img src={selStatus.thumbnail} alt="" className="w-full h-full object-cover" />
+                                : <span className="text-xl" style={selStatus.mediaType === 'text' ? { color: '#fff' } : {}}>{MEDIA_ICON[selStatus.mediaType]}</span>}
+                        </div>
+                        <div>
+                            <p className="font-bold text-[#111b21]">צפו בסטטוס</p>
+                            <p className="text-xs text-gray-400">{fmtDate(selStatus.postedAt)} · 👁 {selStatus.viewsCount}</p>
+                        </div>
+                    </div>
+                    <div className="max-h-80 overflow-auto -mx-2">
+                        {selViewers === null
+                            ? <p className="p-4 text-sm text-gray-400 text-center">טוען…</p>
+                            : selViewers.length === 0
+                                ? <p className="p-4 text-sm text-gray-400 text-center">אין צפיות מתועדות לסטטוס זה.</p>
+                                : selViewers.map((v, i) => (
+                                    <div key={v.viewerJid} className="flex items-center justify-between px-2 py-2 border-b border-gray-50 last:border-0">
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                            <span className="text-xs text-gray-300 w-5 text-center">{i + 1}</span>
+                                            <span dir="ltr" className={`text-sm truncate ${v.phone || v.name ? 'text-[#111b21]' : 'text-gray-400 italic'}`}>{viewerLabel(v)}</span>
+                                        </div>
+                                        <span className="text-xs text-gray-400 flex-shrink-0">{fmtDate(v.viewedAt)}</span>
+                                    </div>
+                                ))}
+                    </div>
+                </Modal>
+            )}
 
             {qrOpen && (
                 <Modal onClose={() => setQrOpen(false)}>
