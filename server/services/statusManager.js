@@ -256,15 +256,19 @@ export async function testStatusQuality(accountId, { type, buffer }) {
   const originalProbe = await probeMedia(buffer, isVideo).catch(() => null);
 
   // מקטע ראשון בלבד — הגדרות הקידוד זהות לכל המקטעים, מספיק למדידת איכות
-  let media, content, segmentCount = 1;
+  // (לא מקודדים את כל הווידאו רק כדי לזרוק — חוסך זמן וזיכרון).
+  let media, content;
+  let segmentCount = 1;
   if (type === 'image') {
     media = await processImage(buffer);
     content = { image: media };
   } else {
-    const segs = await processVideo(buffer);
-    segmentCount = segs.length;
+    const segs = await processVideo(buffer, { firstSegmentOnly: true });
     media = segs[0];
     content = { video: media };
+    // אומדן מספר המקטעים בהעלאה אמיתית, מתוך משך המקור
+    const dur = originalProbe?.durationSec;
+    if (dur) segmentCount = Math.max(1, Math.ceil(dur / 30));
   }
   const sentProbe = await probeMedia(media, isVideo).catch(() => null);
 

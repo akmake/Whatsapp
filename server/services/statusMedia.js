@@ -25,7 +25,8 @@ export async function processImage(buffer) {
 // ווידאו: קידוד H.264 High / yuv420p / AAC, עד 1080×1920,
 // keyframe כפוי כל 30ש' + segment muxer => חיתוך מדויק למקטעים <=30ש'.
 // מחזיר מערך Buffers (מקטע אחד או יותר). ללא ffprobe.
-export async function processVideo(buffer) {
+// opts.firstSegmentOnly — מקודד רק את ~30ש' הראשונות (לבדיקת איכות: מהיר וחסכוני בזיכרון).
+export async function processVideo(buffer, { firstSegmentOnly = false } = {}) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'btbvid-'));
   const inPath = path.join(work, 'input');
   const outPattern = path.join(work, 'seg_%03d.mp4');
@@ -33,7 +34,9 @@ export async function processVideo(buffer) {
 
   try {
     await new Promise((resolve, reject) => {
-      ffmpeg(inPath)
+      const cmd = ffmpeg(inPath);
+      if (firstSegmentOnly) cmd.inputOptions(['-t', String(SEGMENT_SECONDS)]); // קורא רק 30ש' ראשונות
+      cmd
         .videoCodec('libx264')
         .audioCodec('aac')
         .audioBitrate('192k')
