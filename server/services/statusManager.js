@@ -345,6 +345,26 @@ export function startQualityTest(accountId, payload) {
 
 export const getQualityTest = (testId) => testJobs.get(testId) || { status: 'notfound' };
 
+// ─── העלאת סטטוס כעבודת-רקע ─────────────────────────────────────
+// וידאו כבד עלול לקחת זמן רב לעיבוד+העלאה => לא מחזיקים את הבקשה פתוחה
+// (אחרת nginx נותן 504 Gateway Timeout). POST מחזיר jobId; הלקוח סוקר תוצאה.
+const uploadJobs = new Map(); // jobId → { status:'running'|'done'|'error', result?, error? }
+
+export function startStatusUpload(accountId, payload) {
+  const jobId = randomUUID();
+  uploadJobs.set(jobId, { status: 'running' });
+  postStatus(accountId, payload)
+    .then(result => uploadJobs.set(jobId, { status: 'done', result }))
+    .catch(err => {
+      logger.error('btb', `status upload job failed: ${err.message}`, { accountId, stack: err.stack });
+      uploadJobs.set(jobId, { status: 'error', error: err.message });
+    });
+  setTimeout(() => uploadJobs.delete(jobId), 30 * 60_000); // ניקוי אחרי 30ד'
+  return jobId;
+}
+
+export const getStatusUpload = (jobId) => uploadJobs.get(jobId) || { status: 'notfound' };
+
 export const connect = (accountId) =>
   startTenant(waId(accountId), async () => {}, { onStatusPost, onStatusReceipt, emitOwnEvents: true });
 

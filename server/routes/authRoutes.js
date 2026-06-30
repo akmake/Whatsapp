@@ -41,14 +41,14 @@ router.post('/login', loginLimiter, async (req, res, next) => {
   res.cookie('token', token, COOKIE_OPTS);
   res.json({
     status: 'success',
-    data: { user: { _id: user._id, email: user.email, role: user.role } },
+    data: { user: { _id: user._id, email: user.email, role: user.role, btbAccountId: user.btbAccountId, name: user.name } },
   });
 });
 
 router.get('/me', protect, (req, res) => {
   res.json({
     status: 'success',
-    data: { user: { _id: req.user._id, email: req.user.email, role: req.user.role } },
+    data: { user: { _id: req.user._id, email: req.user.email, role: req.user.role, btbAccountId: req.user.btbAccountId, name: req.user.name } },
   });
 });
 

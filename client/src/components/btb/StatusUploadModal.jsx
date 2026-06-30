@@ -50,11 +50,20 @@ export default function StatusUploadModal({ accountId, onClose, onPosted }) {
             fd.append('type', type);
             if (type === 'text') { fd.append('caption', text); fd.append('bgColor', bgColor); }
             else { fd.append('file', file); fd.append('caption', caption); }
-            const res = await api.post(`/btb/${accountId}/status`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-            onPosted?.(res.data);
-            onClose();
+            // ההעלאה רצה ברקע בשרת (וידאו כבד לוקח זמן) — מקבלים jobId וסוקרים עד שמסתיים
+            const { data } = await api.post(`/btb/${accountId}/status`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+            const jobId = data.jobId;
+            const deadline = Date.now() + 600_000; // עד 10 דקות לסרטונים כבדים
+            while (Date.now() < deadline) {
+                await new Promise(r => setTimeout(r, 2500));
+                const job = (await api.get(`/btb/${accountId}/status-job/${jobId}`)).data;
+                if (job.status === 'done')  { onPosted?.(job.result); onClose(); return; }
+                if (job.status === 'error') throw new Error(job.error);
+                if (job.status === 'notfound') throw new Error('ההעלאה אבדה (השרת אותחל?)');
+            }
+            throw new Error('ההעלאה לוקחת יותר מדי זמן — נסה סרטון קצר/קל יותר');
         } catch (err) {
-            alert(err.response?.data?.error || 'שגיאה בהעלאת הסטטוס');
+            alert(err.message || err.response?.data?.error || 'שגיאה בהעלאת הסטטוס');
         } finally { setBusy(false); }
     };
 

@@ -4,6 +4,7 @@ import { useSSE } from '@/hooks/useSSE';
 import Modal from '@/components/ui/Modal';
 import StatusUploadModal from '@/components/btb/StatusUploadModal';
 import { SERVICES } from '@/config/services';
+import { useAuthStore } from '@/stores/authStore';
 
 const BTB = SERVICES.btb;
 
@@ -88,10 +89,12 @@ function ProbeReport({ probe }) {
     );
 }
 
-// ─── טופס יצירת חשבון ─────────────────────────────────────────────
-function CreateAccount({ onCreated }) {
+// ─── טופס יצירת חשבון לקוח (שם עסק + טלפון + פרטי כניסה) ───────────
+function CreateAccount({ onCreated, onClose }) {
     const [name, setName]   = useState('');
     const [phone, setPhone] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [busy, setBusy]   = useState(false);
 
     const submit = async (e) => {
@@ -99,37 +102,49 @@ function CreateAccount({ onCreated }) {
         if (!name || !phone) return;
         setBusy(true);
         try {
-            const res = await api.post('/btb', { name, phone });
+            const res = await api.post('/btb', { name, phone, email: email.trim(), password });
             onCreated(res.data._id);
         } catch (err) {
             alert(err.response?.data?.error || 'שגיאה ביצירת חשבון');
         } finally { setBusy(false); }
     };
 
+    const form = (
+        <form onSubmit={submit} className="w-full">
+            <h2 className="text-lg font-bold text-[#111b21] mb-1">לקוח חדש</h2>
+            <p className="text-sm text-gray-500 mb-5">צור חשבון ופרטי כניסה ללקוח. אחרי היצירה תחבר את הוואטסאפ שלו ב-QR.</p>
+
+            <label className="block text-sm font-medium text-[#111b21] mb-1">שם העסק</label>
+            <input value={name} onChange={e => setName(e.target.value)}
+                className="w-full mb-4 px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200" />
+
+            <label className="block text-sm font-medium text-[#111b21] mb-1">מספר טלפון</label>
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="9725XXXXXXXX" dir="ltr"
+                className="w-full mb-4 px-3 py-2 rounded-lg border border-gray-200 text-right focus:outline-none focus:ring-2 focus:ring-blue-200" />
+
+            <div className="border-t border-gray-100 pt-4 mt-1">
+                <p className="text-xs font-semibold text-gray-400 mb-2">פרטי כניסה ללקוח (אופציונלי — אפשר להוסיף אחר כך)</p>
+                <label className="block text-sm font-medium text-[#111b21] mb-1">אימייל</label>
+                <input value={email} onChange={e => setEmail(e.target.value)} type="email" dir="ltr" placeholder="client@example.com"
+                    className="w-full mb-4 px-3 py-2 rounded-lg border border-gray-200 text-right focus:outline-none focus:ring-2 focus:ring-blue-200" />
+                <label className="block text-sm font-medium text-[#111b21] mb-1">סיסמה (לפחות 8 תווים)</label>
+                <input value={password} onChange={e => setPassword(e.target.value)} type="text" dir="ltr"
+                    className="w-full mb-5 px-3 py-2 rounded-lg border border-gray-200 text-right focus:outline-none focus:ring-2 focus:ring-blue-200" />
+            </div>
+
+            <button type="submit" disabled={busy}
+                className="w-full py-2.5 rounded-lg text-white font-semibold transition disabled:opacity-50"
+                style={{ backgroundColor: BTB.color }}>
+                {busy ? 'יוצר…' : 'צור לקוח'}
+            </button>
+        </form>
+    );
+
+    // מצב מודאל (הוספת לקוח כשכבר יש חשבונות) מול מסך מלא (אין עדיין חשבונות)
+    if (onClose) return <Modal onClose={onClose}>{form}</Modal>;
     return (
         <div className="h-full flex items-center justify-center bg-gray-50 px-6">
-            <form onSubmit={submit} className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-100 p-7">
-                <div className="w-14 h-14 rounded-xl flex items-center justify-center font-black text-white text-xl mb-5"
-                    style={{ backgroundColor: BTB.color }}>
-                    <span style={{ color: BTB.accent }}>B</span>TB
-                </div>
-                <h2 className="text-lg font-bold text-[#111b21] mb-1">חיבור חשבון סטטוסים</h2>
-                <p className="text-sm text-gray-500 mb-5">צור חשבון וחבר אותו לוואטסאפ כדי להתחיל לתעד צפיות.</p>
-
-                <label className="block text-sm font-medium text-[#111b21] mb-1">שם העסק</label>
-                <input value={name} onChange={e => setName(e.target.value)}
-                    className="w-full mb-4 px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-200" />
-
-                <label className="block text-sm font-medium text-[#111b21] mb-1">מספר טלפון</label>
-                <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="9725XXXXXXXX" dir="ltr"
-                    className="w-full mb-5 px-3 py-2 rounded-lg border border-gray-200 text-right focus:outline-none focus:ring-2 focus:ring-blue-200" />
-
-                <button type="submit" disabled={busy}
-                    className="w-full py-2.5 rounded-lg text-white font-semibold transition disabled:opacity-50"
-                    style={{ backgroundColor: BTB.color }}>
-                    {busy ? 'יוצר…' : 'צור וחבר'}
-                </button>
-            </form>
+            <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-gray-100 p-7">{form}</div>
         </div>
     );
 }
@@ -174,8 +189,14 @@ function StatusCard({ s, onClick }) {
 
 // ─── הדף הראשי ────────────────────────────────────────────────────
 export default function BtbPage() {
+    const user   = useAuthStore(s => s.user);
+    const logout = useAuthStore(s => s.logout);
+    const isClient = user?.role === 'client';
+    const isAdmin  = !isClient;
+
     const [accounts, setAccounts] = useState(null);
     const [activeId, setActiveId] = useState(null);
+    const [showCreate, setShowCreate] = useState(false);
     const [stats, setStats]       = useState(null);
     const [statuses, setStatuses] = useState([]);
     const [viewers, setViewers]   = useState([]);
@@ -273,6 +294,13 @@ export default function BtbPage() {
     if (accounts === null) return (
         <div className="h-full flex items-center justify-center text-gray-400 bg-gray-50">טוען…</div>
     );
+    // לקוח בלי חשבון משויך — לא אמור לקרות, אבל ליתר ביטחון
+    if (accounts.length === 0 && isClient) return (
+        <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-500 bg-gray-50 px-6 text-center">
+            <p>החשבון שלך עדיין לא הוגדר. פנה למנהל המערכת.</p>
+            <button onClick={logout} className="text-sm text-gray-400 hover:text-[#111b21]">התנתק</button>
+        </div>
+    );
     if (accounts.length === 0) return <CreateAccount onCreated={(id) => { setActiveId(id); fetchAccounts(); }} />;
 
     const badge = WA_BADGE[account?.waStatus] || WA_BADGE.disconnected;
@@ -283,27 +311,48 @@ export default function BtbPage() {
         <div className="h-full overflow-auto bg-gray-50">
             <div className="max-w-5xl mx-auto px-6 py-8">
                 {/* header */}
-                <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                        <h1 className="text-xl font-bold text-[#111b21]">{account?.name}</h1>
+                <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        {isAdmin && accounts.length > 1 ? (
+                            <select value={activeId || ''} onChange={e => setActiveId(e.target.value)}
+                                className="text-xl font-bold text-[#111b21] bg-transparent border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-200">
+                                {accounts.map(a => <option key={a._id} value={a._id}>{a.name}</option>)}
+                            </select>
+                        ) : (
+                            <h1 className="text-xl font-bold text-[#111b21]">{account?.name}</h1>
+                        )}
                         <span dir="ltr" className="text-sm text-gray-400">{account?.phone}</span>
                         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
+                        {isAdmin && account?.client?.email && (
+                            <span dir="ltr" className="text-xs text-gray-400">· {account.client.email}</span>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
                         {account?.waStatus === 'connected' && (
+                            <button onClick={() => setShowUpload(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                                style={{ backgroundColor: BTB.accent }}>＋ העלה סטטוס</button>
+                        )}
+
+                        {/* כלי ניהול — אדמין בלבד */}
+                        {isAdmin && account?.waStatus === 'connected' && (
                             <>
-                                <button onClick={() => setShowUpload(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                                    style={{ backgroundColor: BTB.accent }}>＋ העלה סטטוס</button>
                                 <button onClick={() => testInput.current?.click()} title="העלאה→הורדה→מחיקה אוטומטית עם דוח איכות"
                                     className="px-3.5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-100">🔬 בדיקת איכות</button>
                                 <input ref={testInput} type="file" accept="image/*,video/*" className="hidden" onChange={runTest} />
                             </>
                         )}
-                        {account?.waStatus !== 'connected' && (
+                        {isAdmin && account?.waStatus !== 'connected' && (
                             <button onClick={openQR} className="px-3.5 py-2 rounded-lg text-sm font-medium text-white"
                                 style={{ backgroundColor: BTB.color }}>חבר / QR</button>
                         )}
-                        <button onClick={reconnect} className="px-3.5 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">חיבור מחדש</button>
+                        {isAdmin && <button onClick={reconnect} className="px-3.5 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">חיבור מחדש</button>}
+                        {isAdmin && <button onClick={() => setShowCreate(true)} className="px-3.5 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: BTB.color }}>＋ לקוח חדש</button>}
+
+                        {/* לקוח */}
+                        {isClient && account?.waStatus !== 'connected' && (
+                            <span className="text-sm text-amber-600">ממתין לחיבור הוואטסאפ ע״י המנהל</span>
+                        )}
+                        {isClient && <button onClick={logout} className="px-3.5 py-2 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100">התנתק</button>}
                     </div>
                 </div>
 
@@ -343,6 +392,13 @@ export default function BtbPage() {
                     ))}
                 </div>
             </div>
+
+            {showCreate && (
+                <CreateAccount
+                    onClose={() => setShowCreate(false)}
+                    onCreated={(id) => { setShowCreate(false); setActiveId(id); fetchAccounts(); }}
+                />
+            )}
 
             {showUpload && (
                 <StatusUploadModal

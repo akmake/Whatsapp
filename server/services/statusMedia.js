@@ -43,7 +43,9 @@ export async function processVideo(buffer, { firstSegmentOnly = false } = {}) {
         .outputOptions([
           '-profile:v', 'high',
           '-pix_fmt', 'yuv420p',
-          '-preset', 'slow',
+          // preset משפיע על מהירות ההמרה וגודל הקובץ — לא על האיכות (שנקבעת ע"י crf).
+          // medium = מהיר פי ~2-3 מ-slow, אותה איכות בדיוק, קובץ מעט גדול יותר (לא אכפת לנו).
+          '-preset', 'medium',
           '-crf', '16',
           // וואטסאפ לא מקודדת מחדש סטטוס (E2E) — לכן הצלע הארוכה עד 1920 (לא 1080):
           // ההורדה היחידה היא שלנו, וגודל הקובץ עדיין רחוק מהתקרה. פורטרייט נשאר 1080×1920.

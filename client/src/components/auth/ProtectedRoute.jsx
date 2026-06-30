@@ -9,8 +9,8 @@ export default function ProtectedRoute({ children }) {
     return <div className="min-h-screen flex items-center justify-center text-slate-500">טוען הרשאות...</div>;
   }
 
-  // אם לא מחובר, או מחובר אבל לא אדמין -> זרוק ללוגין
-  if (!isAuthenticated || !user || user.role !== 'admin') {
+  // לא מחובר -> ללוגין. admin ו-client שניהם מורשים (החלוקה לתפקידים נעשית ב-App)
+  if (!isAuthenticated || !user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

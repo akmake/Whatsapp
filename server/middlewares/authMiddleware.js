@@ -23,7 +23,14 @@ export const protect = async (req, res, next) => {
 
   const user = await User.findById(decoded.id);
   if (!user) return next(new AppError('המשתמש שייך לטוקן זה אינו קיים יותר.', 401));
+  if (user.active === false) return next(new AppError('החשבון הושבת. פנה למנהל המערכת.', 403));
 
   req.user = user;
+  next();
+};
+
+// הגבלת גישה לפי תפקיד — restrictTo('admin') וכו'
+export const restrictTo = (...roles) => (req, res, next) => {
+  if (!roles.includes(req.user?.role)) return next(new AppError('אין לך הרשאה לפעולה זו.', 403));
   next();
 };
