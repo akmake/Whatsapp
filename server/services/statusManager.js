@@ -157,7 +157,7 @@ export const getAudienceSize = (accountId) => getContactJids(waId(accountId)).le
 
 // העלאת סטטוס דרך הדשבורד: עיבוד מדיה -> שליחה ל-status@broadcast -> תיעוד.
 // ווידאו ארוך נחתך אוטומטית למקטעי 30ש' שעולים ברצף.
-export async function postStatus(accountId, { type, buffer, caption = '', bgColor = '', font }) {
+export async function postStatus(accountId, { type, buffer, caption = '', bgColor = '', font, videoQuality = 'max' }) {
   const tenantId = waId(accountId);
   if (!waIsConnected(tenantId)) throw new Error('החשבון לא מחובר');
 
@@ -174,7 +174,7 @@ export async function postStatus(accountId, { type, buffer, caption = '', bgColo
     const media = await processImage(buffer);
     pieces = [{ content: { image: media, caption }, media, isVideo: false }];
   } else if (type === 'video') {
-    const segs = await processVideo(buffer);
+    const segs = await processVideo(buffer, { quality: videoQuality });
     pieces = segs.map((b, i) => ({ content: { video: b, caption: i === 0 ? caption : '' }, media: b, isVideo: true }));
   } else if (type === 'text') {
     const options = {};
@@ -255,7 +255,7 @@ async function captureRoundtrip(tenantId, accountId, msgId, sentMsg, isVideo) {
 // בדיקת איכות בלבד: מעלה כסטטוס (רק לעצמנו — לא מפיצים לעוקבים, ולא שומרים ב-DB),
 // מוריד בחזרה מוואטסאפ, בודק ספק בכל שלב, ואז מוחק את סטטוס הבדיקה.
 // מחזיר את דוח האיכות (מקור → נשלח → וואטסאפ) ללא תיעוד כלשהו.
-export async function testStatusQuality(accountId, { type, buffer }) {
+export async function testStatusQuality(accountId, { type, buffer, videoQuality = 'max' }) {
   const tenantId = waId(accountId);
   if (!waIsConnected(tenantId)) throw new Error('החשבון לא מחובר');
   if (type !== 'image' && type !== 'video') throw new Error('בדיקה נתמכת לתמונה/ווידאו בלבד');
@@ -272,7 +272,7 @@ export async function testStatusQuality(accountId, { type, buffer }) {
     media = await processImage(buffer);
     content = { image: media };
   } else {
-    const segs = await processVideo(buffer, { firstSegmentOnly: true });
+    const segs = await processVideo(buffer, { firstSegmentOnly: true, quality: videoQuality });
     media = segs[0];
     content = { video: media };
     // אומדן מספר המקטעים בהעלאה אמיתית, מתוך משך המקור

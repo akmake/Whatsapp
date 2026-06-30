@@ -30,6 +30,7 @@ class UploadViewModel @Inject constructor(
     var caption by mutableStateOf("")
     var bgColor by mutableStateOf("#0B6B45")
     var font by mutableStateOf(0)
+    var videoQuality by mutableStateOf("max") // max | optimized
     var uploading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var doneCount by mutableStateOf<Int?>(null)
@@ -71,7 +72,7 @@ class UploadViewModel @Inject constructor(
                 if (bytes == null) { error = "לא ניתן לקרוא את הקובץ"; uploading = false; return@launch }
             }
 
-            val res = btbRepo.uploadAndAwait(accountId, type, caption, bgColor, font, bytes, fileName, mime)
+            val res = btbRepo.uploadAndAwait(accountId, type, caption, bgColor, font, videoQuality, bytes, fileName, mime)
             uploading = false
             res.onSuccess { doneCount = it }.onFailure { error = it.message ?: "ההעלאה נכשלה" }
         }

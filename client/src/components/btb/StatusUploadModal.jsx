@@ -20,6 +20,7 @@ export default function StatusUploadModal({ accountId, onClose, onPosted }) {
     const [text, setText]       = useState('');
     const [bgColor, setBgColor] = useState(BG_COLORS[0]);
     const [duration, setDur]    = useState(0);
+    const [videoQuality, setVideoQuality] = useState('max');
     const [audience, setAud]    = useState(null);
     const [busy, setBusy]       = useState(false);
 
@@ -48,6 +49,7 @@ export default function StatusUploadModal({ accountId, onClose, onPosted }) {
         try {
             const fd = new FormData();
             fd.append('type', type);
+            if (type === 'video') fd.append('videoQuality', videoQuality);
             if (type === 'text') { fd.append('caption', text); fd.append('bgColor', bgColor); }
             else { fd.append('file', file); fd.append('caption', caption); }
             // ההעלאה רצה ברקע בשרת (וידאו כבד לוקח זמן) — מקבלים jobId וסוקרים עד שמסתיים
@@ -120,9 +122,23 @@ export default function StatusUploadModal({ accountId, onClose, onPosted }) {
 
                 {/* video segment info */}
                 {type === 'video' && previewUrl && (
-                    <p className="text-xs text-center mb-3 text-gray-500">
-                        {duration ? <>אורך {fmtSec(duration)} · ייחתך ל-<b>{segments}</b> סטטוסים ({segments} × עד 30ש')</> : 'טוען פרטי ווידאו…'}
-                    </p>
+                    <>
+                        <p className="text-xs text-center mb-3 text-gray-500">
+                            {duration ? <>אורך {fmtSec(duration)} · ייחתך ל-<b>{segments}</b> סטטוסים ({segments} × עד 30ש')</> : 'טוען פרטי ווידאו…'}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2 mb-4" role="radiogroup" aria-label="איכות וידאו">
+                            <button type="button" onClick={() => setVideoQuality('max')}
+                                className={`text-right rounded-xl border p-3 transition ${videoQuality === 'max' ? 'border-[#1daa61] bg-[#e9f8ef]' : 'border-gray-200 bg-white'}`}>
+                                <span className="block text-sm font-semibold text-[#111b21]">איכות מרבית</span>
+                                <span className="block text-[11px] text-gray-500 mt-1">הכי קרוב למקור</span>
+                            </button>
+                            <button type="button" onClick={() => setVideoQuality('optimized')}
+                                className={`text-right rounded-xl border p-3 transition ${videoQuality === 'optimized' ? 'border-[#1daa61] bg-[#e9f8ef]' : 'border-gray-200 bg-white'}`}>
+                                <span className="block text-sm font-semibold text-[#111b21]">חיסכון חכם</span>
+                                <span className="block text-[11px] text-gray-500 mt-1">קובץ קטן, איכות גבוהה</span>
+                            </button>
+                        </div>
+                    </>
                 )}
 
                 {/* caption / text input */}

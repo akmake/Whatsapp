@@ -33,6 +33,7 @@ router.get('/:id/audience', (req, res) => {
 // וידאו כבד => העיבוד רץ ברקע ולא מחזיק את הבקשה (אחרת 504). הלקוח סוקר את ה-job.
 router.post('/:id/status', upload.single('file'), (req, res) => {
   const { type, caption = '', bgColor = '', font } = req.body;
+  const videoQuality = req.body.videoQuality === 'optimized' ? 'optimized' : 'max';
   const buffer = req.file?.buffer;
   if ((type === 'image' || type === 'video') && !buffer) return res.status(400).json({ error: 'חסר קובץ' });
   if (type === 'text' && !caption) return res.status(400).json({ error: 'חסר טקסט' });
@@ -40,6 +41,7 @@ router.post('/:id/status', upload.single('file'), (req, res) => {
     const jobId = statusManager.startStatusUpload(req.params.id, {
       type, buffer, caption, bgColor,
       font: font ? parseInt(font) : undefined,
+      videoQuality,
     });
     res.json({ jobId });
   } catch (err) {
@@ -58,7 +60,8 @@ router.post('/:id/status-test', restrictTo('admin'), upload.single('file'), (req
   if (!buffer) return res.status(400).json({ error: 'חסר קובץ' });
   const type = req.body.type || (req.file.mimetype?.startsWith('video') ? 'video' : 'image');
   try {
-    const testId = statusManager.startQualityTest(req.params.id, { type, buffer });
+    const videoQuality = req.body.videoQuality === 'optimized' ? 'optimized' : 'max';
+    const testId = statusManager.startQualityTest(req.params.id, { type, buffer, videoQuality });
     res.json({ testId });
   } catch (err) {
     res.status(500).json({ error: err.message });

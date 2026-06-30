@@ -142,6 +142,19 @@ private fun MediaStatusEditor(vm: UploadViewModel, onClose: () -> Unit, onReplac
         }
 
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().imePadding().background(Color(0xB30B141A)).padding(horizontal = 12.dp, vertical = 10.dp)) {
+            if (vm.type == "video") {
+                Text("איכות העלאה", color = Color(0xFFB9C2C7), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp))
+                Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    VideoQualityChoice(
+                        title = "איכות מרבית", subtitle = "הכי קרוב למקור",
+                        selected = vm.videoQuality == "max", modifier = Modifier.weight(1f),
+                    ) { vm.videoQuality = "max" }
+                    VideoQualityChoice(
+                        title = "חיסכון חכם", subtitle = "קטן יותר, עדיין חד",
+                        selected = vm.videoQuality == "optimized", modifier = Modifier.weight(1f),
+                    ) { vm.videoQuality = "optimized" }
+                }
+            }
             vm.error?.let { Text(it, color = Color(0xFFFF8A9D), fontSize = 13.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
             Row(verticalAlignment = Alignment.Bottom) {
                 OutlinedTextField(
@@ -157,6 +170,21 @@ private fun MediaStatusEditor(vm: UploadViewModel, onClose: () -> Unit, onReplac
                 )
                 SendButton(enabled = !vm.uploading) { focus.clearFocus(); vm.submit() }
             }
+        }
+    }
+}
+
+@Composable
+private fun VideoQualityChoice(title: String, subtitle: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick, modifier = modifier,
+        color = if (selected) WaLightGreen else Color(0xFF202C33),
+        shape = RoundedCornerShape(13.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (selected) WaGreen else Color(0xFF50626B)),
+    ) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
+            Text(title, color = if (selected) WaDarkGreen else Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = if (selected) WaDarkGreen.copy(alpha = .75f) else Color(0xFFB9C2C7), fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }

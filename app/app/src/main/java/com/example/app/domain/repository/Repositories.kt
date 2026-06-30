@@ -28,6 +28,7 @@ interface BtbRepository {
         caption: String,
         bgColor: String,
         font: Int,
+        videoQuality: String,
         bytes: ByteArray?,
         fileName: String?,
         mime: String?,

@@ -54,6 +54,7 @@ interface ApiService {
         @Part("caption") caption: RequestBody,
         @Part("bgColor") bgColor: RequestBody,
         @Part("font") font: RequestBody,
+        @Part("videoQuality") videoQuality: RequestBody,
         @Part file: MultipartBody.Part?,
     ): JobStartDto
 
