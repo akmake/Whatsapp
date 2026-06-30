@@ -35,17 +35,22 @@ router.post('/:id/status', upload.single('file'), async (req, res) => {
   }
 });
 
-// ─── בדיקת איכות: העלאה→הורדה→מחיקה אוטומטית, החזרת דוח ספק ──────
-router.post('/:id/status-test', upload.single('file'), async (req, res) => {
+// ─── בדיקת איכות: עבודת-רקע (POST מפעיל ומחזיר testId; GET סוקר תוצאה) ──
+// הבקשה לא מחזיקה את החיבור פתוח לכל המסע => אין ERR_CONNECTION_RESET.
+router.post('/:id/status-test', upload.single('file'), (req, res) => {
   const buffer = req.file?.buffer;
   if (!buffer) return res.status(400).json({ error: 'חסר קובץ' });
   const type = req.body.type || (req.file.mimetype?.startsWith('video') ? 'video' : 'image');
   try {
-    const result = await statusManager.testStatusQuality(req.params.id, { type, buffer });
-    res.json(result);
+    const testId = statusManager.startQualityTest(req.params.id, { type, buffer });
+    res.json({ testId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+router.get('/:id/status-test/:testId', (req, res) => {
+  res.json(statusManager.getQualityTest(req.params.testId));
 });
 
 // ─── כל חשבונות BTB + סטטוס חיבור ─────────────────────────────────

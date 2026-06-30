@@ -235,19 +235,30 @@ export default function BtbPage() {
 
     const reconnect = async () => { await api.post(`/btb/${activeId}/reconnect`); fetchAccounts(); };
 
-    // בדיקת איכות: בוחר קובץ → מעלה→מוריד→מוחק אוטומטית, ומציג דוח ספק
+    // בדיקת איכות: בוחר קובץ → השרת מעלה→מוריד→מוחק ברקע, והלקוח סוקר תוצאה.
     const runTest = async (e) => {
         const file = e.target.files?.[0];
         e.target.value = ''; // לאפשר בחירה חוזרת של אותו קובץ
         if (!file) return;
         const type = file.type.startsWith('video') ? 'video' : 'image';
+        const accId = activeId;
         setTest({ busy: true, type });
         try {
             const fd = new FormData();
             fd.append('file', file);
             fd.append('type', type);
-            const res = await api.post(`/btb/${activeId}/status-test`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-            setTest({ result: res.data });
+            const { data } = await api.post(`/btb/${accId}/status-test`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+            const testId = data.testId;
+            // סקירה כל 2ש' עד שהעבודה מסתיימת (עד ~3 דקות)
+            const deadline = Date.now() + 180_000;
+            while (Date.now() < deadline) {
+                await new Promise(r => setTimeout(r, 2000));
+                const job = (await api.get(`/btb/${accId}/status-test/${testId}`)).data;
+                if (job.status === 'done')  { setTest({ result: job.result }); return; }
+                if (job.status === 'error') { setTest({ error: job.error }); return; }
+                if (job.status === 'notfound') { setTest({ error: 'הבדיקה אבדה (השרת אותחל?)' }); return; }
+            }
+            setTest({ error: 'הבדיקה לא הסתיימה בזמן' });
         } catch (err) {
             setTest({ error: err.response?.data?.error || 'הבדיקה נכשלה' });
         }

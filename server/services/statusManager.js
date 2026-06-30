@@ -259,6 +259,7 @@ export async function testStatusQuality(accountId, { type, buffer }) {
   const tenantId = waId(accountId);
   if (!waIsConnected(tenantId)) throw new Error('החשבון לא מחובר');
   if (type !== 'image' && type !== 'video') throw new Error('בדיקה נתמכת לתמונה/ווידאו בלבד');
+  logger.warn('btb', `[TEST] start type=${type} src=${(buffer.length / 1024 / 1024).toFixed(1)}MB`, { accountId });
 
   const isVideo = type === 'video';
   const originalProbe = await probeMedia(buffer, isVideo).catch(() => null);
@@ -279,10 +280,11 @@ export async function testStatusQuality(accountId, { type, buffer }) {
     if (dur) segmentCount = Math.max(1, Math.ceil(dur / 30));
   }
   const sentProbe = await probeMedia(media, isVideo).catch(() => null);
+  const mb = (media.length / 1024 / 1024).toFixed(1);
+  logger.warn('btb', `[TEST] encoded ${type} ${mb}MB — uploading to WA`, { accountId });
 
   // שולחים רק לעצמנו — מספיק כדי שהמדיה תעלה לשרת ונוכל להוריד בחזרה, בלי להציק לעוקבים
   const self = getOwnJid(tenantId);
-  logger.info('btb', `quality test: uploading ${type} ${(media.length / 1024 / 1024).toFixed(1)}MB`, { accountId });
   const sent = await withTimeout(
     waSend(tenantId, 'status@broadcast', content, { statusJidList: self ? [self] : [] }),
     90_000, 'העלאת הסטטוס לוואטסאפ');
@@ -290,15 +292,17 @@ export async function testStatusQuality(accountId, { type, buffer }) {
   if (!msgId) throw new Error('השליחה נכשלה');
   testMsgIds.add(msgId); // מונע תיעוד ב-hooks
   setTimeout(() => testMsgIds.delete(msgId), 120_000);
+  logger.warn('btb', `[TEST] uploaded ok msg=${msgId} — downloading back`, { accountId });
 
   let roundtrip = null, roundtripBytes = null, roundtripError = null;
   try {
     const buf = await withTimeout(downloadMessageMedia(tenantId, sent), 90_000, 'הורדת הסטטוס בחזרה');
     roundtrip = await probeMedia(buf, isVideo);
     roundtripBytes = buf.length;
+    logger.warn('btb', `[TEST] downloaded back ${(buf.length / 1024 / 1024).toFixed(1)}MB`, { accountId });
   } catch (err) {
     roundtripError = err.message;
-    logger.warn('btb', `test roundtrip failed: ${err.message}`, { accountId, msgId });
+    logger.warn('btb', `[TEST] roundtrip failed: ${err.message}`, { accountId, msgId });
   }
 
   // מוחקים את סטטוס הבדיקה (וגם רשומה אם איכשהו נוצרה ב-hook לפני הסימון)
@@ -311,7 +315,7 @@ export async function testStatusQuality(accountId, { type, buffer }) {
   }
   await StatusPost.deleteOne({ accountId, msgId }).catch(() => {});
 
-  logger.info('btb', `quality test done msg=${msgId} deleted=${deleted}`, { accountId });
+  logger.warn('btb', `[TEST] done msg=${msgId} deleted=${deleted}`, { accountId });
   return {
     type, segmentCount, deleted, roundtripError,
     probe: {
@@ -321,6 +325,25 @@ export async function testStatusQuality(accountId, { type, buffer }) {
     },
   };
 }
+
+// ─── בדיקת איכות כעבודת-רקע (לא מחזיקה את הבקשה פתוחה => אין reset) ──
+// POST מפעיל ומחזיר testId מיד; הלקוח סוקר את getQualityTest עד שמסתיים.
+const testJobs = new Map(); // testId → { status:'running'|'done'|'error', result?, error? }
+
+export function startQualityTest(accountId, payload) {
+  const testId = randomUUID();
+  testJobs.set(testId, { status: 'running' });
+  testStatusQuality(accountId, payload)
+    .then(result => testJobs.set(testId, { status: 'done', result }))
+    .catch(err => {
+      logger.error('btb', `[TEST] job failed: ${err.message}`, { accountId, stack: err.stack });
+      testJobs.set(testId, { status: 'error', error: err.message });
+    });
+  setTimeout(() => testJobs.delete(testId), 10 * 60_000); // ניקוי אחרי 10ד'
+  return testId;
+}
+
+export const getQualityTest = (testId) => testJobs.get(testId) || { status: 'notfound' };
 
 export const connect = (accountId) =>
   startTenant(waId(accountId), async () => {}, { onStatusPost, onStatusReceipt, emitOwnEvents: true });
