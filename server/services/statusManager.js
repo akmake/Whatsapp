@@ -10,6 +10,7 @@ import {
   resolvePhone,
   resolveContact,
   sendMessage as waSend,
+  downloadMessageMedia,
   getContactJids,
   getStatus as waGetStatus,
   getQR as waGetQR,
@@ -18,6 +19,7 @@ import {
   getMessageType,
 } from './whatsappManager.js';
 import { processImage, processVideo } from './statusMedia.js';
+import { probeMedia } from './statusProbe.js';
 import StatusPost from '../models/StatusPost.js';
 import StatusView from '../models/StatusView.js';
 import { broadcast } from './sseManager.js';
@@ -146,12 +148,19 @@ export async function postStatus(accountId, { type, buffer, caption = '', bgColo
 
   const recipients = getContactJids(tenantId); // statusJidList — בלי זה אף אחד לא רואה
 
+  const isVideo = type === 'video';
+  // ספק הקובץ המקורי (לפני העיבוד שלנו) — שלב "original" בבדיקת האיכות
+  const originalProbe = (type === 'image' || type === 'video')
+    ? await probeMedia(buffer, isVideo).catch(() => null)
+    : null;
+
   let pieces;
   if (type === 'image') {
-    pieces = [{ content: { image: await processImage(buffer), caption } }];
+    const media = await processImage(buffer);
+    pieces = [{ content: { image: media, caption }, media, isVideo: false }];
   } else if (type === 'video') {
     const segs = await processVideo(buffer);
-    pieces = segs.map((b, i) => ({ content: { video: b, caption: i === 0 ? caption : '' } }));
+    pieces = segs.map((b, i) => ({ content: { video: b, caption: i === 0 ? caption : '' }, media: b, isVideo: true }));
   } else if (type === 'text') {
     const options = {};
     if (bgColor) options.backgroundColor = bgColor;
@@ -168,6 +177,20 @@ export async function postStatus(accountId, { type, buffer, caption = '', bgColo
     const sent = await waSend(tenantId, 'status@broadcast', pieces[i].content, opts);
     const msgId = sent?.key?.id;
     if (!msgId) continue;
+
+    // בדיקת איכות — ספק מה ששלחנו בפועל (אחרי הקידוד שלנו). שלב "sent".
+    // (המקור רלוונטי רק למקטע הראשון; שאר המקטעים הם חיתוך של אותו וידאו.)
+    let mediaProbe;
+    if (pieces[i].media) {
+      const sentProbe = await probeMedia(pieces[i].media, pieces[i].isVideo).catch(() => null);
+      mediaProbe = {
+        original: i === 0 ? originalProbe : null,
+        originalBytes: i === 0 ? (buffer?.length ?? null) : null,
+        sent: sentProbe,
+        sentBytes: pieces[i].media.length,
+      };
+    }
+
     await StatusPost.findOneAndUpdate(
       { accountId, msgId },
       {
@@ -179,17 +202,39 @@ export async function postStatus(accountId, { type, buffer, caption = '', bgColo
           bgColor: bgColor || '',
           source: 'upload',
           batchId, segmentIndex: i, segmentCount: pieces.length,
+          ...(mediaProbe ? { mediaProbe } : {}),
         },
         $setOnInsert: { accountId, msgId },
       },
       { upsert: true, new: true }
     );
     count++;
+
+    // לולאת בדיקת האיכות: מורידים בחזרה את הסטטוס שהעלינו ובודקים מה השתנה.
+    // רץ אסינכרונית כדי לא לעכב את תגובת ההעלאה — התוצאה נכנסת ומשדרת ב-SSE.
+    if (pieces[i].media) captureRoundtrip(tenantId, accountId, msgId, sent, pieces[i].isVideo);
   }
 
   broadcast('btb_status');
   logger.info('btb', `posted status: ${count} piece(s) to ${recipients.length} recipients`, { accountId });
   return { count, recipients: recipients.length };
+}
+
+// מוריד בחזרה מוואטסאפ את הסטטוס שהעלינו ובודק את ספק המדיה — שלב "roundtrip".
+// השוואת sent↔roundtrip מגלה אם וואטסאפ שינתה משהו (במדיה E2E — לא אמורה).
+async function captureRoundtrip(tenantId, accountId, msgId, sentMsg, isVideo) {
+  try {
+    const buf = await downloadMessageMedia(tenantId, sentMsg);
+    const roundtrip = await probeMedia(buf, isVideo);
+    await StatusPost.updateOne(
+      { accountId, msgId },
+      { $set: { 'mediaProbe.roundtrip': roundtrip, 'mediaProbe.roundtripBytes': buf.length } }
+    );
+    logger.info('btb', `roundtrip probe ok msg=${msgId} bytes=${buf.length}`, { accountId });
+    broadcast('btb_status');
+  } catch (err) {
+    logger.warn('btb', `roundtrip probe failed: ${err.message}`, { accountId, msgId });
+  }
 }
 
 export const connect = (accountId) =>

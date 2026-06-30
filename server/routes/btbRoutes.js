@@ -162,8 +162,8 @@ router.get('/:id/statuses/:statusId/viewers', async (req, res) => {
     .lean();
 
   res.json(viewers.map(v => {
-    const { phone, name } = statusManager.resolveViewer(req.params.id, v.viewerJid);
-    return { viewerJid: v.viewerJid, phone, name, viewedAt: v.viewedAt, receiptType: v.receiptType };
+    const { phone, name, pushName } = statusManager.resolveViewer(req.params.id, v.viewerJid);
+    return { viewerJid: v.viewerJid, phone, name, pushName, viewedAt: v.viewedAt, receiptType: v.receiptType };
   }));
 });
 
@@ -186,9 +186,9 @@ router.get('/:id/top-viewers', async (req, res) => {
 
   // פתרון טלפון+שם בזמן אמת ממיפויי החיבור (לא מהנתון השמור)
   res.json(viewers.map(v => {
-    const { phone, name } = statusManager.resolveViewer(req.params.id, v._id);
+    const { phone, name, pushName } = statusManager.resolveViewer(req.params.id, v._id);
     return {
-      viewerJid: v._id, phone, name,
+      viewerJid: v._id, phone, name, pushName,
       statusesViewed: v.statusesViewed,
       firstViewedAt: v.firstViewedAt, lastViewedAt: v.lastViewedAt,
     };

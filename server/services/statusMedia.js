@@ -11,14 +11,14 @@ ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 export const SEGMENT_SECONDS = 30;
 
-// תמונה: עד 1080×1920, JPEG איכותי (4:4:4, q90), sRGB.
-// מאכילים את וואטסאפ ב"sweet spot" כך שהקידוד-מחדש שלו כמעט לא פוגע.
+// תמונה: עד 1600 בצלע הארוכה (וואטסאפ ממילא מקטין סביב ~1600 — שולחים גבוה
+// כדי שההקטנה תהיה שלו ולא שלנו), JPEG q95 4:4:4, sRGB, lanczos3.
 export async function processImage(buffer) {
   return await sharp(buffer)
     .rotate() // לפי EXIF
-    .resize({ width: 1080, height: 1920, fit: 'inside', withoutEnlargement: true })
+    .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
     .toColourspace('srgb')
-    .jpeg({ quality: 90, chromaSubsampling: '4:4:4', mozjpeg: true })
+    .jpeg({ quality: 95, chromaSubsampling: '4:4:4', mozjpeg: true })
     .toBuffer();
 }
 
@@ -40,8 +40,8 @@ export async function processVideo(buffer) {
         .outputOptions([
           '-profile:v', 'high',
           '-pix_fmt', 'yuv420p',
-          '-preset', 'medium',
-          '-crf', '20',
+          '-preset', 'slow',
+          '-crf', '18',
           '-vf', "scale='min(1080,iw)':'min(1920,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
           '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_SECONDS})`,
           '-f', 'segment',

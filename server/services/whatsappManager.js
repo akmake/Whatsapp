@@ -11,6 +11,7 @@ import NodeCache from 'node-cache';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { downloadMedia } from './waMessageUtils.js';
 export { getMessageText, getMessageType, downloadMedia } from './waMessageUtils.js';
 import { broadcast } from './sseManager.js';
 import { logger } from '../utils/logger.js';
@@ -36,15 +37,18 @@ const getSessionDir = (tenantId) => path.join(SESSIONS_DIR, tenantId);
 
 const touch = (inst) => { inst.lastEventTimestamp = Date.now(); };
 
-// שומר שם איש קשר + מיפוי LID מתוך אובייקט contact של Baileys
+// שומר שם איש קשר + מיפוי LID מתוך אובייקט contact של Baileys.
+// מפריד בין השם השמור (c.name — מפנקס הכתובות) ל-pushName (c.notify),
+// כדי ש-pushName לא ידרוס שם שמור. עדכון רק כשיש ערך (לא דורסים בריק).
 const storeContact = (inst, c) => {
     if (!c) return;
-    const name = c.name || c.notify || c.verifiedName || '';
-    if (c.id && name) inst.contactName[c.id] = name;
-    if (c.lid) {
-        if (c.id) inst.lidToPhone[c.lid] = c.id;
-        if (name) inst.contactName[c.lid] = name;
+    const saved = c.name || c.verifiedName || '';   // השם השמור / עסקי מאומת
+    const push  = c.notify || '';                    // איך איש הקשר קורא לעצמו
+    for (const key of [c.id, c.lid].filter(Boolean)) {
+        if (saved) inst.contactName[key]   = saved;
+        if (push)  inst.contactNotify[key] = push;
     }
+    if (c.lid && c.id) inst.lidToPhone[c.lid] = c.id;
 };
 
 const getReconnectDelay = (attempts) => {
@@ -70,6 +74,14 @@ export const sendMessage = async (tenantId, jid, content, options) => {
     inst.stats.lastMsgAt = new Date().toISOString();
     inst.stats.lastMsgDirection = 'wa_out';
     return await inst.sock.sendMessage(jid, content, options);
+};
+
+// הורדת המדיה של הודעה (משתמש ב-sock של ה-tenant ל-reupload במידת הצורך).
+// משמש את לולאת בדיקת האיכות — מורידים בחזרה סטטוס שהעלינו ובודקים מה השתנה.
+export const downloadMessageMedia = async (tenantId, msg) => {
+    const inst = instances.get(tenantId);
+    if (!inst?.sock) throw new Error('לא מחובר');
+    return await downloadMedia(msg, inst.sock);
 };
 
 // כל ה-jid של אנשי הקשר (טלפון) — לרשימת נמעני הסטטוס (statusJidList).
@@ -127,14 +139,15 @@ export const resolvePhone = (tenantId, rawJid = '') => {
     return jid.replace('@s.whatsapp.net', '').replace(/\D/g, '');
 };
 
-// מחזיר { phone, name } עבור jid כלשהו — נפתר בזמן אמת ממיפויי ה-instance.
+// מחזיר { phone, name, pushName } עבור jid כלשהו — נפתר בזמן אמת ממיפויי ה-instance.
+// name = השם השמור (מועדף); pushName = איך איש הקשר קורא לעצמו (גיבוי לתצוגה).
 export const resolveContact = (tenantId, rawJid = '') => {
     const jid = rawJid.replace(/:\d+@/, '@');
     const inst = instances.get(tenantId);
     const phone = resolvePhone(tenantId, jid);
-    let name = inst?.contactName?.[jid] || '';
-    if (!name && phone) name = inst?.contactName?.[`${phone}@s.whatsapp.net`] || '';
-    return { phone, name };
+    const phoneJid = phone ? `${phone}@s.whatsapp.net` : '';
+    const pick = (map) => inst?.[map]?.[jid] || (phoneJid && inst?.[map]?.[phoneJid]) || '';
+    return { phone, name: pick('contactName'), pushName: pick('contactNotify') };
 };
 
 // ─── heartbeat ───────────────────────────────────────────────
@@ -194,6 +207,7 @@ const scheduleReconnect = (tenantId, reason) => {
         if (!noReconnect.has(tenantId)) startTenant(tenantId, inst.onMessage, {
             onStatusPost: inst.onStatusPost,
             onStatusReceipt: inst.onStatusReceipt,
+            onStatusMedia: inst.onStatusMedia,
             emitOwnEvents: inst.emitOwnEvents,
         });
     }, delay);
@@ -259,13 +273,15 @@ export const startTenant = async (tenantId, onMessage, opts = {}) => {
         // BTB hooks (אופציונלי) — נשמרים בין reconnect-ים
         onStatusPost:    opts.onStatusPost    ?? existing?.onStatusPost    ?? null,
         onStatusReceipt: opts.onStatusReceipt ?? existing?.onStatusReceipt ?? null,
+        onStatusMedia:   opts.onStatusMedia   ?? existing?.onStatusMedia   ?? null,
         emitOwnEvents:   opts.emitOwnEvents   ?? existing?.emitOwnEvents   ?? false,
         reconnectLock: false,
         reconnectAttempts: existing?.reconnectAttempts ?? 0,
         heartbeatInterval: null,
         lastEventTimestamp: Date.now(),
         lidToPhone, // LID → phone JID mapping (loaded from session files)
-        contactName: existing?.contactName ?? {}, // jid → שם איש קשר (שם שמור / pushName)
+        contactName:   existing?.contactName   ?? {}, // jid → שם שמור (פנקס כתובות)
+        contactNotify: existing?.contactNotify ?? {}, // jid → pushName (איך הוא קורא לעצמו)
         stats: {
             msgsReceived: 0, msgsSent: 0, reconnectCount: 0,
             connectedAt: null, lastMsgAt: null, lastMsgDirection: null,

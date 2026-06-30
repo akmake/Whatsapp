@@ -22,6 +22,72 @@ function fmtDate(ts) {
     return `${d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' })} ${d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+function fmtBytes(b) {
+    if (b == null) return '—';
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+    return `${(b / 1024 / 1024).toFixed(2)} MB`;
+}
+
+// fps מגיע כ-"30/1" — מצמצמים למספר
+function fmtFps(s) {
+    if (!s) return null;
+    const [n, d] = String(s).split('/').map(Number);
+    return d ? `${Math.round(n / d)}` : String(s);
+}
+
+// ─── בדיקת איכות: השוואת ספק המדיה בכל שלב (מקור → נשלח → וואטסאפ) ──
+function ProbeReport({ probe }) {
+    if (!probe || (!probe.sent && !probe.original)) return null;
+    const kind = probe.sent?.kind || probe.original?.kind || probe.roundtrip?.kind;
+    const stages = [
+        { key: 'original',  label: 'מקור',    p: probe.original,  bytes: probe.originalBytes },
+        { key: 'sent',      label: 'נשלח',    p: probe.sent,      bytes: probe.sentBytes },
+        { key: 'roundtrip', label: 'וואטסאפ', p: probe.roundtrip, bytes: probe.roundtripBytes },
+    ];
+    const metrics = kind === 'image'
+        ? [
+            ['פורמט',   p => p?.format],
+            ['רזולוציה', p => (p?.width && p?.height) ? `${p.width}×${p.height}` : null],
+            ['Chroma',  p => p?.chromaSubsampling],
+            ['מרחב צבע', p => p?.space],
+        ]
+        : [
+            ['קודק',     p => p?.video?.codec ? `${p.video.codec} ${p.video.profile || ''}`.trim() : null],
+            ['רזולוציה', p => (p?.video?.width && p?.video?.height) ? `${p.video.width}×${p.video.height}` : null],
+            ['FPS',      p => fmtFps(p?.video?.fps)],
+            ['Bitrate',  p => p?.video?.bitrate || p?.totalBitrate],
+            ['משך',      p => p?.durationSec ? `${p.durationSec.toFixed(1)}s` : null],
+        ];
+    const cell = (val, stageKey) => val || (stageKey === 'roundtrip' ? '…' : '—');
+
+    return (
+        <div className="mb-4 rounded-xl border border-gray-100 overflow-hidden">
+            <div className="px-3 py-2 bg-gray-50 text-xs font-semibold text-gray-500">בדיקת איכות — מה וואטסאפ שינתה</div>
+            <table className="w-full text-xs">
+                <thead>
+                    <tr className="text-gray-400">
+                        <th className="px-3 py-1.5"></th>
+                        {stages.map(s => <th key={s.key} className="text-right font-medium px-3 py-1.5">{s.label}</th>)}
+                    </tr>
+                </thead>
+                <tbody>
+                    {metrics.map(([label, get]) => (
+                        <tr key={label} className="border-t border-gray-50">
+                            <td className="px-3 py-1.5 text-gray-400 whitespace-nowrap">{label}</td>
+                            {stages.map(s => <td key={s.key} dir="ltr" className="px-3 py-1.5 text-right text-[#111b21]">{cell(get(s.p), s.key)}</td>)}
+                        </tr>
+                    ))}
+                    <tr className="border-t border-gray-50 font-semibold">
+                        <td className="px-3 py-1.5 text-gray-400">גודל</td>
+                        {stages.map(s => <td key={s.key} dir="ltr" className="px-3 py-1.5 text-right text-[#111b21]">{s.bytes != null ? fmtBytes(s.bytes) : (s.key === 'roundtrip' ? '…' : '—')}</td>)}
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
 // ─── טופס יצירת חשבון ─────────────────────────────────────────────
 function CreateAccount({ onCreated }) {
     const [name, setName]   = useState('');
@@ -79,8 +145,8 @@ function Metric({ label, value, sub }) {
     );
 }
 
-// תווית זיהוי של צופה — טלפון/שם, או "לא זוהה" אם זה LID שלא מופה
-const viewerLabel = (v) => v.name || v.phone || 'לא זוהה';
+// תווית זיהוי של צופה — שם שמור (מועדף), אחרת pushName, אחרת טלפון, אחרת "לא זוהה"
+const viewerLabel = (v) => v.name || v.pushName || v.phone || 'לא זוהה';
 
 // ─── כרטיסיית סטטוס ───────────────────────────────────────────────
 function StatusCard({ s, onClick }) {
@@ -138,6 +204,12 @@ export default function BtbPage() {
     useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
     useEffect(() => { fetchDetail(activeId); }, [activeId, fetchDetail]);
     useSSE(() => { fetchAccounts(); fetchDetail(activeId); });
+
+    // כשהרשימה מתרעננת (למשל אחרי שבדיקת ה-roundtrip חזרה ב-SSE) — מסנכרנים את
+    // הסטטוס הפתוח במודאל כדי שדוח האיכות יתעדכן בלי לסגור/לפתוח.
+    useEffect(() => {
+        setSelStatus(prev => prev ? (statuses.find(s => s._id === prev._id) || prev) : prev);
+    }, [statuses]);
 
     const account = accounts?.find(a => a._id === activeId);
 
@@ -257,6 +329,7 @@ export default function BtbPage() {
                             <p className="text-xs text-gray-400">{fmtDate(selStatus.postedAt)} · 👁 {selStatus.viewsCount}</p>
                         </div>
                     </div>
+                    <ProbeReport probe={selStatus.mediaProbe} />
                     <div className="max-h-80 overflow-auto -mx-2">
                         {selViewers === null
                             ? <p className="p-4 text-sm text-gray-400 text-center">טוען…</p>

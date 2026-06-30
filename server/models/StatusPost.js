@@ -23,6 +23,11 @@ const statusPostSchema = new mongoose.Schema({
 
   // דנורמליזציה לתצוגה מהירה בדשבורד
   viewsCount:   { type: Number, default: 0 },
+
+  // בדיקת איכות (reverse-engineering): ספק המדיה בכל שלב —
+  // original = הקובץ שהמשתמש העלה, sent = אחרי הקידוד שלנו (מה ששלחנו לוואטסאפ),
+  // roundtrip = מה שהורד בחזרה מוואטסאפ אחרי הפרסום (להשוואה מה השתנה).
+  mediaProbe:   { type: mongoose.Schema.Types.Mixed, default: undefined },
 }, { timestamps: true });
 
 statusPostSchema.index({ accountId: 1, msgId: 1 }, { unique: true });
