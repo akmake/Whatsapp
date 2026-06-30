@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '@/services/api';
+import { X, Image as ImageIcon, Video, Type, Upload, Send, Users, Check } from 'lucide-react';
 
 const BG_COLORS = ['#1F3A5F', '#075E54', '#B23A48', '#6D28D9', '#0F766E', '#B45309', '#111827'];
 const SEGMENT_SECONDS = 30;
@@ -69,108 +70,48 @@ export default function StatusUploadModal({ accountId, onClose, onPosted }) {
         } finally { setBusy(false); }
     };
 
+    const TypeIcon = type === 'image' ? ImageIcon : type === 'video' ? Video : Type;
     return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-[#111b21]">העלאת סטטוס</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
-                </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b141a]/90 sm:p-5" onClick={() => !busy && onClose()}>
+            <div className="flex h-full w-full max-w-4xl flex-col overflow-hidden bg-white shadow-2xl sm:h-auto sm:max-h-[92vh] sm:rounded-3xl" onClick={e => e.stopPropagation()}>
+                <header className="flex items-center justify-between border-b border-[#e9edef] px-4 py-3 sm:px-6">
+                    <div><h2 className="text-xl font-bold text-[#111b21]">סטטוס חדש</h2><p className="text-xs text-[#667781]">בחרו תוכן, בדקו ושלחו</p></div>
+                    <button onClick={onClose} disabled={busy} className="rounded-full p-2 text-[#54656f] hover:bg-[#f0f2f5] disabled:opacity-40"><X size={23} /></button>
+                </header>
 
-                {/* type tabs */}
-                <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-4">
-                    {TYPES.map(t => (
-                        <button key={t.id} onClick={() => switchType(t.id)}
-                            className={`flex-1 py-1.5 rounded-md text-sm font-medium transition ${type === t.id ? 'bg-white shadow text-[#111b21]' : 'text-gray-500'}`}>
-                            {t.label}
-                        </button>
-                    ))}
-                </div>
-
-                {/* preview */}
-                <div className="rounded-xl bg-gray-900 overflow-hidden mb-4 flex items-center justify-center relative" style={{ aspectRatio: '9 / 16', maxHeight: '46vh', margin: '0 auto' }}>
-                    {type === 'text' ? (
-                        <div className="w-full h-full flex items-center justify-center p-6 text-white text-center text-xl font-medium break-words" style={{ backgroundColor: bgColor }}>
-                            {text || 'הקלד טקסט…'}
+                <div className="grid min-h-0 flex-1 overflow-y-auto md:grid-cols-[minmax(280px,1fr)_360px] md:overflow-hidden">
+                    <div className="flex min-h-[320px] items-center justify-center bg-[#0b141a] p-4 sm:min-h-[480px]">
+                        <div className="relative flex h-full max-h-[65vh] w-full max-w-sm items-center justify-center overflow-hidden rounded-2xl bg-[#111b21]" style={{ aspectRatio: '9 / 16' }}>
+                            {type === 'text' ? <div className="flex h-full w-full items-center justify-center break-words p-7 text-center text-2xl font-semibold text-white" style={{ backgroundColor: bgColor }}>{text || 'כתבו סטטוס'}</div>
+                                : !previewUrl ? <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-3 text-[#b9c2c7]"><span className="flex h-16 w-16 items-center justify-center rounded-full bg-white/10"><Upload size={30} /></span><span className="font-semibold">בחירת {type === 'image' ? 'תמונה' : 'וידאו'}</span><span className="text-xs">לחצו לבחירה מהמכשיר</span><input type="file" accept={type === 'image' ? 'image/*' : 'video/*'} onChange={onFile} className="hidden" /></label>
+                                : type === 'image' ? <img src={previewUrl} alt="" className="h-full w-full object-contain" />
+                                    : <video src={previewUrl} className="h-full w-full object-contain" controls onLoadedMetadata={e => setDur(e.target.duration || 0)} />}
+                            {caption && type !== 'text' && <div className="absolute inset-x-0 bottom-0 bg-black/60 px-4 py-3 text-center text-sm text-white">{caption}</div>}
                         </div>
-                    ) : !previewUrl ? (
-                        <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer text-gray-400 gap-2">
-                            <span className="text-4xl">{type === 'image' ? '🖼️' : '🎬'}</span>
-                            <span className="text-sm">בחר {type === 'image' ? 'תמונה' : 'ווידאו'}</span>
-                            <input type="file" accept={type === 'image' ? 'image/*' : 'video/*'} onChange={onFile} className="hidden" />
-                        </label>
-                    ) : type === 'image' ? (
-                        <>
-                            <img src={previewUrl} alt="" className="w-full h-full object-contain" />
-                            {caption && <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-sm px-3 py-2 text-center">{caption}</div>}
-                        </>
-                    ) : (
-                        <>
-                            <video src={previewUrl} className="w-full h-full object-contain" controls
-                                onLoadedMetadata={e => setDur(e.target.duration || 0)} />
-                            {/* segment story-bars */}
-                            {segments > 1 && (
-                                <div className="absolute top-2 inset-x-2 flex gap-1">
-                                    {Array.from({ length: segments }).map((_, i) => (
-                                        <div key={i} className="flex-1 h-1 rounded-full bg-white/80" />
-                                    ))}
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
+                    </div>
 
-                {/* video segment info */}
-                {type === 'video' && previewUrl && (
-                    <>
-                        <p className="text-xs text-center mb-3 text-gray-500">
-                            {duration ? <>אורך {fmtSec(duration)} · ייחתך ל-<b>{segments}</b> סטטוסים ({segments} × עד 30ש')</> : 'טוען פרטי ווידאו…'}
-                        </p>
-                        <div className="grid grid-cols-2 gap-2 mb-4" role="radiogroup" aria-label="איכות וידאו">
-                            <button type="button" onClick={() => setVideoQuality('max')}
-                                className={`text-right rounded-xl border p-3 transition ${videoQuality === 'max' ? 'border-[#1daa61] bg-[#e9f8ef]' : 'border-gray-200 bg-white'}`}>
-                                <span className="block text-sm font-semibold text-[#111b21]">איכות מרבית</span>
-                                <span className="block text-[11px] text-gray-500 mt-1">הכי קרוב למקור</span>
-                            </button>
-                            <button type="button" onClick={() => setVideoQuality('optimized')}
-                                className={`text-right rounded-xl border p-3 transition ${videoQuality === 'optimized' ? 'border-[#1daa61] bg-[#e9f8ef]' : 'border-gray-200 bg-white'}`}>
-                                <span className="block text-sm font-semibold text-[#111b21]">חיסכון חכם</span>
-                                <span className="block text-[11px] text-gray-500 mt-1">קובץ קטן, איכות גבוהה</span>
-                            </button>
+                    <div className="p-5 sm:p-6 md:overflow-y-auto">
+                        <div className="mb-6 grid grid-cols-3 gap-2 rounded-2xl bg-[#f0f2f5] p-1.5">
+                            {TYPES.map(t => { const Icon = t.id === 'image' ? ImageIcon : t.id === 'video' ? Video : Type; return <button key={t.id} onClick={() => switchType(t.id)} className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold transition ${type === t.id ? 'bg-white text-[#075e54] shadow-sm' : 'text-[#667781]'}`}><Icon size={17} />{t.label}</button>; })}
                         </div>
-                    </>
-                )}
 
-                {/* caption / text input */}
-                {type === 'text' ? (
-                    <>
-                        <textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="הטקסט שלך…"
-                            className="w-full mb-3 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 resize-none" />
-                        <div className="flex gap-2 mb-4">
-                            {BG_COLORS.map(c => (
-                                <button key={c} onClick={() => setBgColor(c)}
-                                    className={`w-7 h-7 rounded-full border-2 ${bgColor === c ? 'border-gray-800' : 'border-transparent'}`}
-                                    style={{ backgroundColor: c }} />
-                            ))}
-                        </div>
-                    </>
-                ) : previewUrl && (
-                    <input value={caption} onChange={e => setCaption(e.target.value)} placeholder="כיתוב (יופיע מתחת לסטטוס)…"
-                        className="w-full mb-4 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200" />
-                )}
+                        <div className="mb-5 flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#d9fdd3] text-[#075e54]"><TypeIcon size={20} /></span><div><p className="font-bold text-[#111b21]">{type === 'text' ? 'סטטוס טקסט' : type === 'video' ? 'וידאו לסטטוס' : 'תמונה לסטטוס'}</p><p className="text-xs text-[#667781]">התצוגה משמאל היא מה שיפורסם</p></div></div>
 
-                {/* audience + submit */}
-                <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-400">
-                        {audience === null ? 'בודק נמענים…' : `יישלח ל-${audience.toLocaleString()} אנשי קשר`}
-                    </span>
-                    <button onClick={submit} disabled={!canSubmit}
-                        className="px-5 py-2 rounded-lg text-white font-semibold transition disabled:opacity-40"
-                        style={{ backgroundColor: '#1F3A5F' }}>
-                        {busy ? 'מעלה…' : 'פרסם'}
-                    </button>
+                        {type === 'text' ? <>
+                            <textarea value={text} onChange={e => setText(e.target.value)} rows={4} placeholder="מה תרצו לשתף?" className="mb-4 w-full resize-none rounded-2xl border border-[#dfe3e5] p-3 text-sm outline-none focus:border-[#1daa61] focus:ring-2 focus:ring-[#1daa61]/15" />
+                            <p className="mb-2 text-xs font-semibold text-[#667781]">צבע רקע</p><div className="mb-5 flex flex-wrap gap-2">{BG_COLORS.map(c => <button key={c} onClick={() => setBgColor(c)} className={`h-8 w-8 rounded-full transition ${bgColor === c ? 'ring-2 ring-[#111b21] ring-offset-2' : ''}`} style={{ backgroundColor: c }} />)}</div>
+                        </> : previewUrl && <input value={caption} onChange={e => setCaption(e.target.value)} placeholder="הוספת כיתוב…" className="mb-5 w-full rounded-2xl border border-[#dfe3e5] px-4 py-3 text-sm outline-none focus:border-[#1daa61] focus:ring-2 focus:ring-[#1daa61]/15" />}
+
+                        {type === 'video' && previewUrl && <>
+                            <p className="mb-3 text-xs text-[#667781]">{duration ? `אורך ${fmtSec(duration)} · ${segments} סטטוסים של עד 30 שניות` : 'טוען פרטי וידאו…'}</p>
+                            <div className="mb-5 grid grid-cols-2 gap-2">{[['max','איכות מרבית','הכי קרוב למקור'],['optimized','חיסכון חכם','קטן יותר, עדיין חד']].map(([id,title,sub]) => <button key={id} onClick={() => setVideoQuality(id)} className={`relative rounded-2xl border p-3 text-right ${videoQuality === id ? 'border-[#1daa61] bg-[#e9f8ef]' : 'border-[#e1e5e7]'}`}>{videoQuality === id && <Check size={15} className="absolute left-2 top-2 text-[#008069]" />}<span className="block text-sm font-bold">{title}</span><span className="mt-1 block text-[11px] text-[#667781]">{sub}</span></button>)}</div>
+                        </>}
+
+                        <div className="mt-auto flex items-center gap-2 rounded-2xl bg-[#f7f8fa] p-3 text-xs text-[#667781]"><Users size={17} className="text-[#1daa61]" />{audience === null ? 'בודק נמענים…' : `יישלח ל־${audience.toLocaleString()} אנשי קשר`}</div>
+                        <button onClick={submit} disabled={!canSubmit} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#1daa61] py-3.5 font-bold text-white transition hover:bg-[#168d51] disabled:cursor-not-allowed disabled:opacity-40">{busy ? <><span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />מפרסם…</> : <><Send size={19} />פרסום לסטטוס</>}</button>
+                        {busy && type === 'video' && <p className="mt-2 text-center text-xs text-[#8696a0]">מקודד, חותך ומפרסם — אפשר להשאיר את החלון פתוח</p>}
+                    </div>
                 </div>
-                {busy && type === 'video' && <p className="text-xs text-gray-400 mt-2 text-center">מעבד ווידאו (קידוד + חיתוך) — עשוי לקחת מספר שניות…</p>}
             </div>
         </div>
     );

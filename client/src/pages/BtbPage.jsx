@@ -6,6 +6,11 @@ import Modal from '@/components/ui/Modal';
 import StatusUploadModal from '@/components/btb/StatusUploadModal';
 import { SERVICES } from '@/config/services';
 import { useAuthStore } from '@/stores/authStore';
+import {
+    Home, CircleDashed, Users, Plus, Eye, RefreshCw, LogOut,
+    FlaskConical, QrCode, Link2, Image as ImageIcon, Video, Type,
+    Check, WifiOff, Target, ChevronLeft, Search,
+} from 'lucide-react';
 
 const BTB = SERVICES.btb;
 
@@ -16,7 +21,7 @@ const WA_BADGE = {
     disconnected:{ label: 'מנותק',     cls: 'bg-red-100 text-red-600' },
 };
 
-const MEDIA_ICON = { image: '🖼️', video: '🎬', text: '📝', unknown: '🕓' };
+const MEDIA_ICON = { image: ImageIcon, video: Video, text: Type, unknown: CircleDashed };
 
 function fmtDate(ts) {
     if (!ts) return '—';
@@ -69,9 +74,9 @@ function ProbeReport({ probe }) {
     const cell = (val, stageKey) => val || (stageKey === 'roundtrip' ? '…' : '—');
 
     return (
-        <div className="mb-4 rounded-xl border border-gray-100 overflow-hidden">
+        <div className="mb-4 overflow-x-auto rounded-2xl border border-[#e9edef]">
             <div className="px-3 py-2 bg-gray-50 text-xs font-semibold text-gray-500">בדיקת איכות — מה וואטסאפ שינתה</div>
-            <table className="w-full text-xs">
+            <table className="w-full min-w-[520px] text-xs">
                 <thead>
                     <tr className="text-gray-400">
                         <th className="px-3 py-1.5"></th>
@@ -96,12 +101,13 @@ function ProbeReport({ probe }) {
 }
 
 // ─── כרטיס מדד ────────────────────────────────────────────────────
-function Metric({ label, value, sub }) {
+function Metric({ label, value, sub, icon: Icon }) {
     return (
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <p className="text-xs text-gray-400 mb-1">{label}</p>
-            <p className="text-2xl font-bold text-[#111b21]">{value}</p>
-            {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+        <div className="rounded-2xl border border-[#e9edef] bg-[#f7f8fa] p-4 sm:p-5">
+            {Icon && <Icon size={23} className="mb-3 text-[#1daa61]" strokeWidth={1.9} />}
+            <p className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111b21]">{value}</p>
+            <p className="mt-0.5 text-sm text-[#667781]">{label}</p>
+            {sub && <p className="mt-1 text-xs text-[#8696a0]">{sub}</p>}
         </div>
     );
 }
@@ -111,26 +117,37 @@ const viewerLabel = (v) => v.name || v.pushName || v.phone || 'לא זוהה';
 
 // ─── כרטיסיית סטטוס ───────────────────────────────────────────────
 function StatusCard({ s, onClick }) {
+    const MediaIcon = MEDIA_ICON[s.mediaType] || CircleDashed;
     return (
-        <button onClick={onClick} className="group text-right rounded-xl overflow-hidden border border-gray-100 bg-white hover:shadow-md transition">
-            <div className="relative bg-gray-100 flex items-center justify-center overflow-hidden" style={{ aspectRatio: '9 / 16' }}>
+        <button onClick={onClick} className="group flex w-full items-center gap-3 rounded-2xl p-2.5 text-right transition hover:bg-[#f5f6f6] focus:outline-none focus:ring-2 focus:ring-[#1daa61]/30">
+            <div className="relative h-16 w-16 flex-none overflow-hidden rounded-full bg-[#f0f2f5] ring-[3px] ring-[#1daa61] ring-offset-2 flex items-center justify-center">
                 {s.thumbnail
                     ? <img src={s.thumbnail} alt="" className="w-full h-full object-cover" />
                     : s.mediaType === 'text'
-                        ? <div className="w-full h-full flex items-center justify-center p-3 text-white text-xs text-center leading-snug"
-                            style={{ backgroundColor: s.bgColor || BTB.color }}>{s.caption || 'טקסט'}</div>
-                        : <span className="text-4xl opacity-60">{MEDIA_ICON[s.mediaType] || '❓'}</span>}
-
-                <span className="absolute top-1.5 right-1.5 text-sm drop-shadow">{MEDIA_ICON[s.mediaType]}</span>
-                <span className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent text-white text-xs px-2 py-1.5 font-semibold">
-                    👁 {s.viewsCount}
-                </span>
+                        ? <div className="w-full h-full flex items-center justify-center p-2 text-white text-[8px] text-center leading-tight" style={{ backgroundColor: s.bgColor || '#0b6b45' }}>{s.caption || 'טקסט'}</div>
+                        : <MediaIcon size={27} className="text-[#667781]" />}
             </div>
-            <div className="px-2 py-1.5">
-                <p className="text-[11px] text-gray-400">{fmtDate(s.postedAt)}</p>
+            <div className="min-w-0 flex-1 border-b border-[#eef0f1] py-2.5">
+                <p className="truncate text-[15px] font-semibold text-[#111b21]">{s.caption || (s.mediaType === 'video' ? 'סטטוס וידאו' : s.mediaType === 'image' ? 'סטטוס תמונה' : 'סטטוס טקסט')}</p>
+                <p className="mt-1 text-xs text-[#8696a0]">{fmtDate(s.postedAt)}</p>
             </div>
+            <div className="flex flex-none items-center gap-1 text-sm font-semibold text-[#008069]"><Eye size={17} />{s.viewsCount}</div>
         </button>
     );
+}
+
+function EmptyState({ title, text }) {
+    return <div className="flex flex-col items-center justify-center py-16 text-center"><div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#f0f2f5]"><CircleDashed size={30} className="text-[#8696a0]" /></div><p className="font-bold text-[#111b21]">{title}</p><p className="mt-1 text-sm text-[#8696a0]">{text}</p></div>;
+}
+
+function AudienceRow({ viewer, index }) {
+    const colors = ['bg-[#53bdeb]', 'bg-[#7f66ff]', 'bg-[#e56b6f]', 'bg-[#00a884]'];
+    const label = viewerLabel(viewer);
+    return <div className="flex items-center gap-3 border-b border-[#eef0f1] px-4 py-3 last:border-0 hover:bg-[#f7f8fa]">
+        <div className={`flex h-12 w-12 flex-none items-center justify-center rounded-full text-lg font-bold text-white ${colors[index % colors.length]}`}>{label.charAt(0)}</div>
+        <div className="min-w-0 flex-1"><p className="truncate font-semibold">{label}</p>{viewer.phone && <p dir="ltr" className="truncate text-right text-xs text-[#8696a0]">{viewer.phone}</p>}</div>
+        <span className="rounded-full bg-[#d9fdd3] px-3 py-1 text-xs font-bold text-[#075e54]">{viewer.statusesViewed} צפיות</span>
+    </div>;
 }
 
 // ─── דשבורד של חשבון בודד — משמש גם את הלקוח (הכניסה שלו) וגם את ─────
@@ -154,6 +171,8 @@ export default function BtbPage() {
     const [selStatus, setSelStatus]   = useState(null);
     const [selViewers, setSelViewers] = useState(null);
     const [showUpload, setShowUpload] = useState(false);
+    const [activeTab, setActiveTab] = useState('home');
+    const [statusSearch, setStatusSearch] = useState('');
     const [test, setTest] = useState(null);
     const testInput = useRef(null);
 
@@ -177,6 +196,10 @@ export default function BtbPage() {
 
     useEffect(() => { fetchMeta(); fetchDetail(); }, [fetchMeta, fetchDetail]);
     useSSE(() => { fetchMeta(); fetchDetail(); });
+    useEffect(() => {
+        const timer = setInterval(() => { fetchMeta(); fetchDetail(); }, 15000);
+        return () => clearInterval(timer);
+    }, [fetchMeta, fetchDetail]);
 
     // שמירה על סנכרון הסטטוס הפתוח במודאל כשהרשימה מתרעננת (דוח איכות מ-SSE)
     useEffect(() => {
@@ -254,88 +277,94 @@ export default function BtbPage() {
     const badge = WA_BADGE[account?.waStatus] || WA_BADGE.disconnected;
     const target = stats?.targetFollowers || account?.targetFollowers || 1000;
     const pct = stats ? Math.min(100, Math.round((stats.uniqueViewers / target) * 100)) : 0;
+    const filteredStatuses = statuses.filter(s => !statusSearch.trim() || (s.caption || '').toLowerCase().includes(statusSearch.trim().toLowerCase()));
+
+    const navItems = [
+        { id: 'home', label: 'בית', icon: Home },
+        { id: 'statuses', label: 'עדכונים', icon: CircleDashed },
+        { id: 'audience', label: 'קהל', icon: Users },
+    ];
+    const connected = account?.waStatus === 'connected';
 
     return (
-        <div className="h-full overflow-auto bg-gray-50">
-            <div className="max-w-5xl mx-auto px-6 py-8">
-                {/* back (admin) */}
-                {isAdmin && (
-                    <button onClick={() => navigate('/btb')} className="text-sm text-gray-400 hover:text-[#111b21] mb-3">← כל הלקוחות</button>
-                )}
-
-                {/* header */}
-                <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <h1 className="text-xl font-bold text-[#111b21]">{account?.name}</h1>
-                        <span dir="ltr" className="text-sm text-gray-400">{account?.phone}</span>
-                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
-                        {isAdmin && account?.client?.email && (
-                            <span dir="ltr" className="text-xs text-gray-400">· {account.client.email}</span>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {account?.waStatus === 'connected' && (
-                            <button onClick={() => setShowUpload(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                                style={{ backgroundColor: BTB.accent }}>＋ העלה סטטוס</button>
-                        )}
-
-                        {/* ניהול חיבור — אדמין בלבד */}
-                        {isAdmin && account?.waStatus === 'connected' && (
-                            <>
-                                <button onClick={() => testInput.current?.click()} title="העלאה→הורדה→מחיקה אוטומטית עם דוח איכות"
-                                    className="px-3.5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-100">🔬 בדיקת איכות</button>
-                                <input ref={testInput} type="file" accept="image/*,video/*" className="hidden" onChange={runTest} />
-                            </>
-                        )}
-                        {isAdmin && account?.waStatus !== 'connected' && (
-                            <button onClick={openQR} className="px-3.5 py-2 rounded-lg text-sm font-medium text-white"
-                                style={{ backgroundColor: BTB.color }}>חבר / QR</button>
-                        )}
-                        {isAdmin && <button onClick={reconnect} className="px-3.5 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">חיבור מחדש</button>}
-
-                        {/* לקוח */}
-                        {isClient && account?.waStatus !== 'connected' && (
-                            <span className="text-sm text-amber-600">ממתין לחיבור הוואטסאפ ע״י המנהל</span>
-                        )}
-                        {isClient && <button onClick={logout} className="px-3.5 py-2 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100">התנתק</button>}
-                    </div>
-                </div>
-
-                {/* metrics */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                    <Metric label="סטטוסים" value={stats?.totalStatuses ?? '—'} />
-                    <Metric label="צופים ייחודיים" value={stats?.uniqueViewers ?? '—'} sub={`יעד: ${target.toLocaleString()}`} />
-                    <Metric label="סך צפיות" value={stats?.totalViews ?? '—'} />
-                    <Metric label="התקדמות ליעד" value={`${pct}%`} sub={stats?.targetReached ? '🎯 היעד הושג!' : ''} />
-                </div>
-
-                {/* progress bar */}
-                <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden mb-8">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: BTB.accent }} />
-                </div>
-
-                {/* status cards */}
-                <h2 className="text-sm font-semibold text-gray-500 mb-3">סטטוסים — לחץ לצפייה במי שצפה</h2>
-                {statuses.length === 0
-                    ? <div className="bg-white rounded-xl border border-gray-100 p-8 text-sm text-gray-400 text-center mb-8">עדיין אין סטטוסים. העלה סטטוס וצפה כאן.</div>
-                    : <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 mb-8">
-                        {statuses.map(s => <StatusCard key={s._id} s={s} onClick={() => openViewers(s)} />)}
-                    </div>}
-
-                {/* core followers */}
-                <h2 className="text-sm font-semibold text-gray-500 mb-3">גרעין העוקבים <span className="font-normal text-gray-400">(לפי כמות סטטוסים שנצפו)</span></h2>
-                <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50">
-                    {viewers.length === 0 && <p className="p-4 text-sm text-gray-400 text-center">עדיין אין צפיות מתועדות.</p>}
-                    {viewers.map((v, i) => (
-                        <div key={v.viewerJid} className="flex items-center justify-between px-4 py-2.5">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                                <span className="text-xs text-gray-300 w-5 text-center">{i + 1}</span>
-                                <span dir="ltr" className={`text-sm truncate ${v.phone || v.name ? 'text-[#111b21]' : 'text-gray-400 italic'}`}>{viewerLabel(v)}</span>
-                            </div>
-                            <span className="text-sm font-semibold flex-shrink-0" style={{ color: BTB.color }}>{v.statusesViewed}</span>
+        <div className="h-full overflow-hidden bg-[#f0f2f5] text-[#111b21]">
+            <div className="mx-auto flex h-full max-w-[1440px] bg-white shadow-sm">
+                <aside className="hidden w-64 flex-none flex-col border-l border-[#e9edef] bg-white lg:flex">
+                    <div className="border-b border-[#e9edef] px-5 py-5">
+                        {isAdmin && <button onClick={() => navigate('/btb')} className="mb-4 flex items-center gap-1 text-xs text-[#667781] hover:text-[#008069]"><ChevronLeft size={15} />כל הלקוחות</button>}
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#1daa61] text-xl font-bold text-white">{account?.name?.[0] || 'B'}</div>
+                            <div className="min-w-0"><p className="truncate font-bold">{account?.name}</p><p dir="ltr" className="text-right text-xs text-[#667781]">{account?.phone}</p></div>
                         </div>
-                    ))}
-                </div>
+                    </div>
+                    <nav className="space-y-1 p-3">
+                        {navItems.map(({ id, label, icon: Icon }) => <button key={id} onClick={() => setActiveTab(id)} className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition ${activeTab === id ? 'bg-[#d9fdd3] text-[#075e54]' : 'text-[#54656f] hover:bg-[#f0f2f5]'}`}><Icon size={21} />{label}</button>)}
+                    </nav>
+                    <div className="mt-auto space-y-1 border-t border-[#e9edef] p-3">
+                        {isAdmin && connected && <button onClick={() => testInput.current?.click()} className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm text-[#54656f] hover:bg-[#f0f2f5]"><FlaskConical size={19} />בדיקת איכות</button>}
+                        <input ref={testInput} type="file" accept="image/*,video/*" className="hidden" onChange={runTest} />
+                        {isAdmin && !connected && <button onClick={openQR} className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm text-[#54656f] hover:bg-[#f0f2f5]"><QrCode size={19} />חיבור QR</button>}
+                        {isAdmin && <button onClick={reconnect} className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm text-[#54656f] hover:bg-[#f0f2f5]"><Link2 size={19} />חיבור מחדש</button>}
+                        {isClient && <button onClick={logout} className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm text-[#54656f] hover:bg-[#f0f2f5]"><LogOut size={19} />התנתקות</button>}
+                    </div>
+                </aside>
+
+                <main className="relative flex min-w-0 flex-1 flex-col bg-white">
+                    <header className="z-10 flex min-h-[76px] items-center justify-between border-b border-[#e9edef] bg-white px-4 sm:px-7">
+                        <div>
+                            <h1 className="text-2xl font-bold">{activeTab === 'home' ? 'BTB' : activeTab === 'statuses' ? 'עדכונים' : 'קהל'}</h1>
+                            <p className="mt-0.5 text-xs text-[#667781] lg:hidden">{account?.name}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <button onClick={() => { fetchMeta(); fetchDetail(); }} className="rounded-full p-2.5 text-[#54656f] hover:bg-[#f0f2f5]" aria-label="רענון"><RefreshCw size={20} /></button>
+                            {isClient && <button onClick={logout} className="rounded-full p-2.5 text-[#54656f] hover:bg-[#f0f2f5] lg:hidden" aria-label="התנתקות"><LogOut size={20} /></button>}
+                        </div>
+                    </header>
+
+                    <div className="flex-1 overflow-y-auto px-4 pb-28 pt-5 sm:px-7 lg:pb-8">
+                        <div className="mx-auto max-w-4xl">
+                            {activeTab === 'home' && <>
+                                <section className={`mb-6 flex items-center gap-4 rounded-2xl p-4 sm:p-5 ${connected ? 'bg-[#d9fdd3]' : 'bg-[#fff3d6]'}`}>
+                                    <div className={`flex h-12 w-12 flex-none items-center justify-center rounded-full text-white ${connected ? 'bg-[#1daa61]' : 'bg-[#c47b00]'}`}>{connected ? <Check size={25} /> : <WifiOff size={24} />}</div>
+                                    <div className="min-w-0 flex-1"><p className="font-bold">{connected ? 'WhatsApp מחובר' : 'WhatsApp לא מחובר'}</p><p className="mt-0.5 text-sm text-[#667781]">{connected ? account?.phone : 'יש לחבר את החשבון כדי לפרסם סטטוסים'}</p></div>
+                                    <span className={`hidden rounded-full px-3 py-1 text-xs font-bold sm:block ${badge.cls}`}>{badge.label}</span>
+                                </section>
+                                <h2 className="mb-3 text-xl font-bold">סקירה</h2>
+                                <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                    <Metric label="סטטוסים" value={stats?.totalStatuses ?? '—'} icon={CircleDashed} />
+                                    <Metric label="צופים ייחודיים" value={stats?.uniqueViewers ?? '—'} icon={Users} />
+                                    <Metric label="סך צפיות" value={stats?.totalViews ?? '—'} icon={Eye} />
+                                    <Metric label="התקדמות" value={`${pct}%`} icon={Target} />
+                                </div>
+                                <section className="mb-8 rounded-2xl border border-[#e9edef] p-5">
+                                    <div className="mb-3 flex justify-between text-sm"><span className="font-bold">התקדמות ליעד</span><span className="font-bold text-[#008069]">{stats?.uniqueViewers ?? 0} / {target.toLocaleString()}</span></div>
+                                    <div className="h-2.5 overflow-hidden rounded-full bg-[#e9edef]"><div className="h-full rounded-full bg-[#1daa61] transition-all" style={{ width: `${pct}%` }} /></div>
+                                    <p className="mt-2 text-xs text-[#667781]">{stats?.targetReached ? 'היעד הושג — עבודה יפה!' : `${pct}% מהיעד`}</p>
+                                </section>
+                                <div className="mb-2 flex items-center justify-between"><h2 className="text-xl font-bold">פעילות אחרונה</h2><button onClick={() => setActiveTab('statuses')} className="text-sm font-semibold text-[#008069]">לכל העדכונים</button></div>
+                                <div>{statuses.length ? statuses.slice(0, 4).map(s => <StatusCard key={s._id} s={s} onClick={() => openViewers(s)} />) : <EmptyState title="אין עדיין סטטוסים" text="הסטטוס הראשון שלך יופיע כאן" />}</div>
+                            </>}
+
+                            {activeTab === 'statuses' && <>
+                                <label className="mb-5 flex items-center gap-3 rounded-full bg-[#f0f2f5] px-5 py-3 text-sm text-[#667781]"><Search size={18} /><input value={statusSearch} onChange={e => setStatusSearch(e.target.value)} placeholder="חיפוש בעדכונים" className="min-w-0 flex-1 bg-transparent text-[#111b21] outline-none placeholder:text-[#667781]" /></label>
+                                <div className="mb-2 flex items-center justify-between"><div><h2 className="text-xl font-bold">הסטטוסים שלי</h2><p className="mt-1 text-sm text-[#667781]">{statuses.length} עדכונים אחרונים</p></div></div>
+                                <div>{filteredStatuses.length ? filteredStatuses.map(s => <StatusCard key={s._id} s={s} onClick={() => openViewers(s)} />) : <EmptyState title={statuses.length ? "לא נמצאו תוצאות" : "אין סטטוסים"} text={statuses.length ? "נסו חיפוש אחר" : "לחץ על הכפתור הירוק כדי לפרסם"} />}</div>
+                            </>}
+
+                            {activeTab === 'audience' && <>
+                                <h2 className="text-xl font-bold">גרעין העוקבים</h2><p className="mb-5 mt-1 text-sm text-[#667781]">האנשים שמעורבים הכי הרבה בסטטוסים שלך</p>
+                                <div className="overflow-hidden rounded-2xl border border-[#e9edef]">
+                                    {viewers.length ? viewers.map((v, i) => <AudienceRow key={v.viewerJid} viewer={v} index={i} />) : <EmptyState title="אין עדיין נתוני קהל" text="לאחר צפיות בסטטוסים הקהל יופיע כאן" />}
+                                </div>
+                            </>}
+                        </div>
+                    </div>
+
+                    {connected && <button onClick={() => setShowUpload(true)} className="absolute bottom-24 left-5 z-20 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#1daa61] text-white shadow-lg transition hover:bg-[#168d51] hover:scale-105 lg:bottom-6 lg:left-7" aria-label="סטטוס חדש"><Plus size={28} /></button>}
+                    <nav className="absolute inset-x-0 bottom-0 z-10 flex border-t border-[#e9edef] bg-white px-2 pb-[env(safe-area-inset-bottom)] lg:hidden">
+                        {navItems.map(({ id, label, icon: Icon }) => <button key={id} onClick={() => setActiveTab(id)} className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-semibold ${activeTab === id ? 'text-[#075e54]' : 'text-[#667781]'}`}><span className={`rounded-2xl px-5 py-1 ${activeTab === id ? 'bg-[#d9fdd3]' : ''}`}><Icon size={20} /></span>{label}</button>)}
+                    </nav>
+                </main>
             </div>
 
             {showUpload && (
@@ -347,19 +376,19 @@ export default function BtbPage() {
             )}
 
             {selStatus && (
-                <Modal onClose={() => setSelStatus(null)}>
+                <Modal onClose={() => setSelStatus(null)} className="max-w-2xl">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="w-12 h-16 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
                             {selStatus.thumbnail
                                 ? <img src={selStatus.thumbnail} alt="" className="w-full h-full object-cover" />
-                                : <span className="text-xl" style={selStatus.mediaType === 'text' ? { color: '#fff' } : {}}>{MEDIA_ICON[selStatus.mediaType]}</span>}
+                                : selStatus.mediaType === 'video' ? <Video size={24} className="text-[#667781]" /> : selStatus.mediaType === 'image' ? <ImageIcon size={24} className="text-[#667781]" /> : <Type size={24} className="text-[#667781]" />}
                         </div>
                         <div>
                             <p className="font-bold text-[#111b21]">צפו בסטטוס</p>
                             <p className="text-xs text-gray-400">{fmtDate(selStatus.postedAt)} · 👁 {selStatus.viewsCount}</p>
                         </div>
                     </div>
-                    {isAdmin && <ProbeReport probe={selStatus.mediaProbe} />}
+                    <ProbeReport probe={selStatus.mediaProbe} />
                     <div className="max-h-80 overflow-auto -mx-2">
                         {selViewers === null
                             ? <p className="p-4 text-sm text-gray-400 text-center">טוען…</p>
@@ -379,7 +408,7 @@ export default function BtbPage() {
             )}
 
             {test && (
-                <Modal onClose={() => { if (!test.busy) setTest(null); }}>
+                <Modal onClose={() => { if (!test.busy) setTest(null); }} className="max-w-2xl">
                     <p className="font-bold text-[#111b21] mb-1">בדיקת איכות</p>
                     {test.busy && (
                         <div className="py-8 text-center text-sm text-gray-500">
