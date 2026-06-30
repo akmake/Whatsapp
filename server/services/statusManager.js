@@ -33,6 +33,14 @@ const waId = (accountId) => `btb_${accountId}`;
 // msgId של סטטוסי בדיקת-איכות — מסומנים כדי שה-hooks לא יתעדו אותם ב-DB.
 const testMsgIds = new Set();
 
+// עוטף promise ב-timeout כדי ששלב תקוע (העלאה/הורדה מוואטסאפ) ייכשל בשגיאה ברורה
+// במקום להחזיק את הבקשה פתוחה עד ש-proxy/טאנל מאפס אותה (ERR_CONNECTION_RESET).
+const withTimeout = (promise, ms, label) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} עבר את ה-timeout (${ms / 1000}ש')`)), ms)),
+  ]);
+
 const mediaTypeOf = (m) => {
   const t = getMessageType(m);
   if (t === 'imageMessage') return 'image';
@@ -274,18 +282,22 @@ export async function testStatusQuality(accountId, { type, buffer }) {
 
   // שולחים רק לעצמנו — מספיק כדי שהמדיה תעלה לשרת ונוכל להוריד בחזרה, בלי להציק לעוקבים
   const self = getOwnJid(tenantId);
-  const sent = await waSend(tenantId, 'status@broadcast', content, { statusJidList: self ? [self] : [] });
+  logger.info('btb', `quality test: uploading ${type} ${(media.length / 1024 / 1024).toFixed(1)}MB`, { accountId });
+  const sent = await withTimeout(
+    waSend(tenantId, 'status@broadcast', content, { statusJidList: self ? [self] : [] }),
+    90_000, 'העלאת הסטטוס לוואטסאפ');
   const msgId = sent?.key?.id;
   if (!msgId) throw new Error('השליחה נכשלה');
   testMsgIds.add(msgId); // מונע תיעוד ב-hooks
   setTimeout(() => testMsgIds.delete(msgId), 120_000);
 
-  let roundtrip = null, roundtripBytes = null;
+  let roundtrip = null, roundtripBytes = null, roundtripError = null;
   try {
-    const buf = await downloadMessageMedia(tenantId, sent);
+    const buf = await withTimeout(downloadMessageMedia(tenantId, sent), 90_000, 'הורדת הסטטוס בחזרה');
     roundtrip = await probeMedia(buf, isVideo);
     roundtripBytes = buf.length;
   } catch (err) {
+    roundtripError = err.message;
     logger.warn('btb', `test roundtrip failed: ${err.message}`, { accountId, msgId });
   }
 
@@ -301,7 +313,7 @@ export async function testStatusQuality(accountId, { type, buffer }) {
 
   logger.info('btb', `quality test done msg=${msgId} deleted=${deleted}`, { accountId });
   return {
-    type, segmentCount, deleted,
+    type, segmentCount, deleted, roundtripError,
     probe: {
       original: originalProbe, originalBytes: buffer.length,
       sent: sentProbe, sentBytes: media.length,

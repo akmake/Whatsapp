@@ -390,6 +390,9 @@ export default function BtbPage() {
                                 {test.result.deleted ? '✓ סטטוס הבדיקה נמחק' : '⚠ מחיקת הסטטוס נכשלה — בדוק ידנית'}
                                 {test.result.segmentCount > 1 && ` · נבדק מקטע 1 מתוך ${test.result.segmentCount}`}
                             </p>
+                            {test.result.roundtripError && (
+                                <p className="text-xs text-amber-600 mb-3">⚠ ההורדה בחזרה נכשלה: {test.result.roundtripError} — מוצגים מקור + נשלח בלבד.</p>
+                            )}
                             <ProbeReport probe={test.result.probe} />
                             <button onClick={() => setTest(null)} className="w-full py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: BTB.color }}>סגור</button>
                         </>
