@@ -11,6 +11,8 @@ import {
   resolveContact,
   sendMessage as waSend,
   downloadMessageMedia,
+  getOwnJid,
+  deleteMessage,
   getContactJids,
   getStatus as waGetStatus,
   getQR as waGetQR,
@@ -27,6 +29,9 @@ import { logger } from '../utils/logger.js';
 
 // namespace ל-session/instance של BTB כדי לא להתנגש ב-WTM
 const waId = (accountId) => `btb_${accountId}`;
+
+// msgId של סטטוסי בדיקת-איכות — מסומנים כדי שה-hooks לא יתעדו אותם ב-DB.
+const testMsgIds = new Set();
 
 const mediaTypeOf = (m) => {
   const t = getMessageType(m);
@@ -57,6 +62,7 @@ const bgColorOf = (m) => {
 async function onStatusPost(waTenantId, m) {
   const accountId = waTenantId.replace('btb_', '');
   const msgId = m.key.id;
+  if (testMsgIds.has(msgId)) return; // סטטוס בדיקת-איכות — לא מתעדים
   try {
     // $set מעשיר גם כרטיסייה שכבר נוצרה כ-stub מתוך רסיט
     const post = await StatusPost.findOneAndUpdate(
@@ -96,6 +102,7 @@ async function onStatusPost(waTenantId, m) {
 async function onStatusReceipt(waTenantId, view) {
   const accountId = waTenantId.replace('btb_', '');
   const { msgId, viewerJid, viewedAt, receiptType } = view;
+  if (testMsgIds.has(msgId)) return; // סטטוס בדיקת-איכות — לא מתעדים
   try {
     // יוצרים/מוודאים כרטיסיית סטטוס מתוך הרסיט עצמו (גם אם ההודעה היוצאת לא סונכרנה).
     // אם onStatusPost כבר רץ — הכרטיסייה קיימת עם התוכן המלא ולא נדרסת.
@@ -235,6 +242,68 @@ async function captureRoundtrip(tenantId, accountId, msgId, sentMsg, isVideo) {
   } catch (err) {
     logger.warn('btb', `roundtrip probe failed: ${err.message}`, { accountId, msgId });
   }
+}
+
+// בדיקת איכות בלבד: מעלה כסטטוס (רק לעצמנו — לא מפיצים לעוקבים, ולא שומרים ב-DB),
+// מוריד בחזרה מוואטסאפ, בודק ספק בכל שלב, ואז מוחק את סטטוס הבדיקה.
+// מחזיר את דוח האיכות (מקור → נשלח → וואטסאפ) ללא תיעוד כלשהו.
+export async function testStatusQuality(accountId, { type, buffer }) {
+  const tenantId = waId(accountId);
+  if (!waIsConnected(tenantId)) throw new Error('החשבון לא מחובר');
+  if (type !== 'image' && type !== 'video') throw new Error('בדיקה נתמכת לתמונה/ווידאו בלבד');
+
+  const isVideo = type === 'video';
+  const originalProbe = await probeMedia(buffer, isVideo).catch(() => null);
+
+  // מקטע ראשון בלבד — הגדרות הקידוד זהות לכל המקטעים, מספיק למדידת איכות
+  let media, content, segmentCount = 1;
+  if (type === 'image') {
+    media = await processImage(buffer);
+    content = { image: media };
+  } else {
+    const segs = await processVideo(buffer);
+    segmentCount = segs.length;
+    media = segs[0];
+    content = { video: media };
+  }
+  const sentProbe = await probeMedia(media, isVideo).catch(() => null);
+
+  // שולחים רק לעצמנו — מספיק כדי שהמדיה תעלה לשרת ונוכל להוריד בחזרה, בלי להציק לעוקבים
+  const self = getOwnJid(tenantId);
+  const sent = await waSend(tenantId, 'status@broadcast', content, { statusJidList: self ? [self] : [] });
+  const msgId = sent?.key?.id;
+  if (!msgId) throw new Error('השליחה נכשלה');
+  testMsgIds.add(msgId); // מונע תיעוד ב-hooks
+  setTimeout(() => testMsgIds.delete(msgId), 120_000);
+
+  let roundtrip = null, roundtripBytes = null;
+  try {
+    const buf = await downloadMessageMedia(tenantId, sent);
+    roundtrip = await probeMedia(buf, isVideo);
+    roundtripBytes = buf.length;
+  } catch (err) {
+    logger.warn('btb', `test roundtrip failed: ${err.message}`, { accountId, msgId });
+  }
+
+  // מוחקים את סטטוס הבדיקה (וגם רשומה אם איכשהו נוצרה ב-hook לפני הסימון)
+  let deleted = false;
+  try {
+    await deleteMessage(tenantId, 'status@broadcast', sent.key);
+    deleted = true;
+  } catch (err) {
+    logger.warn('btb', `test delete failed: ${err.message}`, { accountId, msgId });
+  }
+  await StatusPost.deleteOne({ accountId, msgId }).catch(() => {});
+
+  logger.info('btb', `quality test done msg=${msgId} deleted=${deleted}`, { accountId });
+  return {
+    type, segmentCount, deleted,
+    probe: {
+      original: originalProbe, originalBytes: buffer.length,
+      sent: sentProbe, sentBytes: media.length,
+      roundtrip, roundtripBytes,
+    },
+  };
 }
 
 export const connect = (accountId) =>

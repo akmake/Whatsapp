@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '@/services/api';
 import { useSSE } from '@/hooks/useSSE';
 import Modal from '@/components/ui/Modal';
@@ -184,6 +184,8 @@ export default function BtbPage() {
     const [selStatus, setSelStatus] = useState(null);
     const [selViewers, setSelViewers] = useState(null);
     const [showUpload, setShowUpload] = useState(false);
+    const [test, setTest] = useState(null); // { busy } | { result } | { error }
+    const testInput = useRef(null);
 
     const fetchAccounts = useCallback(async () => {
         const res = await api.get('/btb');
@@ -233,6 +235,24 @@ export default function BtbPage() {
 
     const reconnect = async () => { await api.post(`/btb/${activeId}/reconnect`); fetchAccounts(); };
 
+    // בדיקת איכות: בוחר קובץ → מעלה→מוריד→מוחק אוטומטית, ומציג דוח ספק
+    const runTest = async (e) => {
+        const file = e.target.files?.[0];
+        e.target.value = ''; // לאפשר בחירה חוזרת של אותו קובץ
+        if (!file) return;
+        const type = file.type.startsWith('video') ? 'video' : 'image';
+        setTest({ busy: true, type });
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('type', type);
+            const res = await api.post(`/btb/${activeId}/status-test`, fd);
+            setTest({ result: res.data });
+        } catch (err) {
+            setTest({ error: err.response?.data?.error || 'הבדיקה נכשלה' });
+        }
+    };
+
     const openViewers = async (s) => {
         setSelStatus(s); setSelViewers(null);
         try { setSelViewers((await api.get(`/btb/${activeId}/statuses/${s._id}/viewers`)).data); }
@@ -260,8 +280,13 @@ export default function BtbPage() {
                     </div>
                     <div className="flex items-center gap-2">
                         {account?.waStatus === 'connected' && (
-                            <button onClick={() => setShowUpload(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
-                                style={{ backgroundColor: BTB.accent }}>＋ העלה סטטוס</button>
+                            <>
+                                <button onClick={() => setShowUpload(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+                                    style={{ backgroundColor: BTB.accent }}>＋ העלה סטטוס</button>
+                                <button onClick={() => testInput.current?.click()} title="העלאה→הורדה→מחיקה אוטומטית עם דוח איכות"
+                                    className="px-3.5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-100">🔬 בדיקת איכות</button>
+                                <input ref={testInput} type="file" accept="image/*,video/*" className="hidden" onChange={runTest} />
+                            </>
                         )}
                         {account?.waStatus !== 'connected' && (
                             <button onClick={openQR} className="px-3.5 py-2 rounded-lg text-sm font-medium text-white"
@@ -345,6 +370,30 @@ export default function BtbPage() {
                                     </div>
                                 ))}
                     </div>
+                </Modal>
+            )}
+
+            {test && (
+                <Modal onClose={() => { if (!test.busy) setTest(null); }}>
+                    <p className="font-bold text-[#111b21] mb-1">בדיקת איכות</p>
+                    {test.busy && (
+                        <div className="py-8 text-center text-sm text-gray-500">
+                            <div className="text-3xl mb-3 animate-pulse">🔬</div>
+                            מעלה לסטטוס, מוריד בחזרה ומוחק…
+                            <p className="text-xs text-gray-400 mt-1">{test.type === 'video' ? 'וידאו עשוי לקחת מספר שניות לקידוד' : ''}</p>
+                        </div>
+                    )}
+                    {test.error && <p className="py-6 text-sm text-red-600 text-center">{test.error}</p>}
+                    {test.result && (
+                        <>
+                            <p className="text-xs text-gray-400 mb-3">
+                                {test.result.deleted ? '✓ סטטוס הבדיקה נמחק' : '⚠ מחיקת הסטטוס נכשלה — בדוק ידנית'}
+                                {test.result.segmentCount > 1 && ` · נבדק מקטע 1 מתוך ${test.result.segmentCount}`}
+                            </p>
+                            <ProbeReport probe={test.result.probe} />
+                            <button onClick={() => setTest(null)} className="w-full py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: BTB.color }}>סגור</button>
+                        </>
+                    )}
                 </Modal>
             )}
 

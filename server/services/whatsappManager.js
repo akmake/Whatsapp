@@ -84,6 +84,19 @@ export const downloadMessageMedia = async (tenantId, msg) => {
     return await downloadMedia(msg, inst.sock);
 };
 
+// ה-jid של החשבון עצמו (בלי סיומת המכשיר) — לבדיקת איכות שולחים רק לעצמנו.
+export const getOwnJid = (tenantId) => {
+    const id = instances.get(tenantId)?.sock?.user?.id || '';
+    return id ? id.replace(/:\d+@/, '@') : '';
+};
+
+// מחיקת הודעה (delete-for-everyone). משמש למחיקת סטטוס הבדיקה אחרי ההורדה.
+export const deleteMessage = async (tenantId, jid, key) => {
+    const inst = instances.get(tenantId);
+    if (!inst?.sock) throw new Error('לא מחובר');
+    return await inst.sock.sendMessage(jid, { delete: key });
+};
+
 // כל ה-jid של אנשי הקשר (טלפון) — לרשימת נמעני הסטטוס (statusJidList).
 export const getContactJids = (tenantId) => {
     const inst = instances.get(tenantId);

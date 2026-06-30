@@ -35,6 +35,19 @@ router.post('/:id/status', upload.single('file'), async (req, res) => {
   }
 });
 
+// ─── בדיקת איכות: העלאה→הורדה→מחיקה אוטומטית, החזרת דוח ספק ──────
+router.post('/:id/status-test', upload.single('file'), async (req, res) => {
+  const buffer = req.file?.buffer;
+  if (!buffer) return res.status(400).json({ error: 'חסר קובץ' });
+  const type = req.body.type || (req.file.mimetype?.startsWith('video') ? 'video' : 'image');
+  try {
+    const result = await statusManager.testStatusQuality(req.params.id, { type, buffer });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── כל חשבונות BTB + סטטוס חיבור ─────────────────────────────────
 router.get('/', async (req, res) => {
   const accounts = await BtbAccount.find().sort({ createdAt: -1 });
