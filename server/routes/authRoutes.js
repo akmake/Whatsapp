@@ -15,9 +15,9 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const signToken = (id) =>
+const signToken = (id, expiresIn) =>
   jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '90d',
+    expiresIn: expiresIn || process.env.JWT_EXPIRES_IN || '90d',
   });
 
 const COOKIE_OPTS = {
@@ -36,11 +36,14 @@ router.post('/login', loginLimiter, async (req, res, next) => {
   if (!user || !(await user.correctPassword(password, user.password)))
     return next(new AppError('אימייל או סיסמה שגויים.', 401));
 
-  const token = signToken(user._id);
+  // לקוחות באפליקציה — token ארוך-טווח כדי שיישארו מחוברים "לתמיד"
+  const token = signToken(user._id, user.role === 'client' ? '3650d' : undefined);
 
   res.cookie('token', token, COOKIE_OPTS);
   res.json({
     status: 'success',
+    // token מוחזר בגוף עבור האפליקציה (Authorization: Bearer) — הדפדפן ממשיך עם ה-cookie
+    token,
     data: { user: { _id: user._id, email: user.email, role: user.role, btbAccountId: user.btbAccountId, name: user.name } },
   });
 });

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ערכת נושא host ל-Activity; ה-UI האמיתי מעוצב ב-Compose (BtbTheme). -->
+    <style name="Theme.BtbClient" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#1F3A5F</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
